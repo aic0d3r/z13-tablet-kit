@@ -1,0 +1,3 @@
+# Grant the active user read access to the ELAN9008 touchscreen
+# (logind auto-sets an ACL via the uaccess tag — no group membership needed).
+ACTION=="add|change", SUBSYSTEM=="input", ATTRS{name}=="ELAN9008:00 04F3:43C7", TAG+="uaccess"

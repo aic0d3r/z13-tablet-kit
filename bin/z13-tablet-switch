@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+"""z13-tablet-switch — virtual SW_TABLET_MODE switch driven by Z13 posture.
+
+Plasma's tablet mode (bigger panel/buttons, auto OSK, maximized apps) is gated on
+a hardware SW_TABLET_MODE switch the GZ302 never emits (the WMI device advertises
+the capability but fires nothing). This creates a virtual uinput switch and flips
+it ON only in tablet posture (undocked AND no keyboard folio), so Plasma engages
+its real tablet mode. Runs as root (needs /dev/uinput).
+"""
+import glob
+import time
+from evdev import UInput, ecodes
+
+DOCK = (0x0B05, 0x1AC1)   # ASUS dock hub  -> external monitor = desktop
+FOLIO = (0x0B05, 0x1A30)  # Z13 keyboard folio = laptop
+SW = ecodes.SW_TABLET_MODE
+POLL = 2
+
+
+def usb(vid, pid):
+    for d in glob.glob("/sys/bus/usb/devices/*-*"):
+        try:
+            v = open(f"{d}/idVendor").read().strip()
+            p = open(f"{d}/idProduct").read().strip()
+            if v == "%04x" % vid and p == "%04x" % pid:
+                return True
+        except OSError:
+            pass
+    return False
+
+
+def tablet_posture():
+    return not usb(*DOCK) and not usb(*FOLIO)
+
+
+def main():
+    ui = UInput(events={ecodes.EV_SW: [SW]}, name="z13-tablet-switch")
+    cur = None
+    while True:
+        want = 1 if tablet_posture() else 0
+        if want != cur:
+            ui.write(ecodes.EV_SW, SW, want)
+            ui.syn()
+            cur = want
+        time.sleep(POLL)
+
+
+if __name__ == "__main__":
+    main()

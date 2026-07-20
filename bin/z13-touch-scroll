@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+"""
+z13-touch-scroll: 2-finger vertical swipe → mouse wheel scroll.
+
+Reads the ELAN9008 touchscreen and detects 2-finger vertical swipes,
+then injects mouse wheel events via evdev UInput. Wheel events work
+everywhere: terminal scrollback, opencode TUI, browsers, etc.
+
+No external dependencies beyond python-evdev. Touchscreen read access
+is granted by the udev uaccess rule (logind auto-sets ACL). /dev/uinput
+write access is auto-granted by logind for the active session.
+
+Tuning: edit STEP / NOTCHES_PER_STEP below.
+"""
+
+import evdev
+import sys
+
+TOUCHSCREEN_NAME = "ELAN9008:00 04F3:43C7"
+MIN_FINGERS = 2
+STEP = 90               # pixels of swipe per wheel notch (Y range 0–2064)
+NOTCHES_PER_STEP = 2    # wheel events per step (higher = more scroll)
+
+
+def find_touchscreen():
+    """Find the touchscreen device (has ABS_MT_SLOT, not the stylus)."""
+    for path in evdev.list_devices():
+        try:
+            dev = evdev.InputDevice(path)
+        except PermissionError:
+            continue
+        if TOUCHSCREEN_NAME in dev.name and "Stylus" not in dev.name:
+            caps = dev.capabilities().get(evdev.ecodes.EV_ABS, [])
+            abs_codes = {c for c, _ in caps}
+            if evdev.ecodes.ABS_MT_SLOT in abs_codes:
+                return dev
+    return None
+
+
+def main():
+    dev = find_touchscreen()
+    if not dev:
+        print(f"Touchscreen '{TOUCHSCREEN_NAME}' not found "
+              f"(or no read permission — check udev uaccess rule).",
+              file=sys.stderr)
+        sys.exit(1)
+
+    # Create virtual mouse wheel device
+    try:
+        ui = evdev.UInput(
+            events={evdev.ecodes.EV_REL: [evdev.ecodes.REL_WHEEL]},
+            name="z13-touch-wheel")
+    except Exception as e:
+        print(f"Cannot create UInput device: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"z13-touch-scroll: {dev.name} ({dev.path})", flush=True)
+    print(f"  {MIN_FINGERS}-finger swipe → mouse wheel", flush=True)
+
+    pos_y = {}            # slot → current Y
+    current_slot = 0
+    ref_y = None          # avg-Y when swipe started
+    last_trigger = 0      # last triggered delta position
+
+    for event in dev.read_loop():
+        if event.type == evdev.ecodes.EV_ABS:
+            if event.code == evdev.ecodes.ABS_MT_SLOT:
+                current_slot = event.value
+            elif event.code == evdev.ecodes.ABS_MT_TRACKING_ID:
+                if event.value == -1:
+                    pos_y.pop(current_slot, None)
+                else:
+                    pos_y[current_slot] = None
+            elif event.code == evdev.ecodes.ABS_MT_POSITION_Y:
+                if current_slot in pos_y:
+                    pos_y[current_slot] = event.value
+
+        elif (event.type == evdev.ecodes.EV_SYN
+              and event.code == evdev.ecodes.SYN_REPORT):
+            active = {k: v for k, v in pos_y.items() if v is not None}
+
+            if len(active) >= MIN_FINGERS:
+                avg = sum(active.values()) / len(active)
+                if ref_y is None:
+                    ref_y = avg
+                    last_trigger = 0
+
+                delta = avg - ref_y  # positive = fingers moved down
+
+                # Trigger wheel events per STEP pixels of movement
+                while delta - last_trigger > STEP:
+                    for _ in range(NOTCHES_PER_STEP):
+                        ui.write(evdev.ecodes.EV_REL,
+                                 evdev.ecodes.REL_WHEEL, -1)  # scroll down
+                    ui.syn()
+                    last_trigger += STEP
+                while last_trigger - delta > STEP:
+                    for _ in range(NOTCHES_PER_STEP):
+                        ui.write(evdev.ecodes.EV_REL,
+                                 evdev.ecodes.REL_WHEEL, 1)   # scroll up
+                    ui.syn()
+                    last_trigger -= STEP
+            else:
+                ref_y = None
+
+
+if __name__ == "__main__":
+    main()

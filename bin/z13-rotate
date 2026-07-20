@@ -1,0 +1,48 @@
+#!/bin/bash
+# Auto-rotate the Z13 internal panel from the accelerometer — ONLY in tablet posture.
+# Reads posture from ~/.cache/asus-dock-state (written by asus-dock). When not tablet,
+# forces eDP-1 back to normal. Axis->rotation mapping may need flipping for your unit's
+# sensor mount; hold the tablet and use the calibration note at the bottom to tune.
+set -u
+export XDG_RUNTIME_DIR=/run/user/"$(id -u)" DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/"$(id -u)"/bus
+DEV=/sys/bus/iio/devices/iio:device0
+STATEF="$HOME/.cache/asus-dock-state"
+OUT=eDP-1
+THR=500        # ~0.5g raw threshold for "dominant axis"
+POLL=2         # seconds between samples
+prev=none
+
+abs() { local v="${1:-0}"; [ "$v" -lt 0 ] && echo $((0 - v)) || echo "$v"; }
+
+while :; do
+	posture=$(cat "$STATEF" 2>/dev/null)
+	if [ "$posture" != tablet ]; then
+		# Force landscape ONLY when we last set a non-none rotation. Calling
+		# kscreen-doctor every poll grabbed the DRM device continuously and raced
+		# KWin's monitor hotplug ("driver rejected output configuration") on dock.
+		if [ "$prev" != none ]; then
+			kscreen-doctor output."$OUT".rotation.none >/dev/null 2>&1 || true
+			prev=none
+		fi
+		sleep "$POLL"; continue
+	fi
+
+	read -r x < "$DEV/in_accel_x_raw" 2>/dev/null
+	read -r y < "$DEV/in_accel_y_raw" 2>/dev/null
+	read -r z < "$DEV/in_accel_z_raw" 2>/dev/null
+	x=${x:-0}; y=${y:-0}; z=${z:-0}
+	ax=$(abs "$x"); ay=$(abs "$y"); az=$(abs "$z")
+
+	# dominant axis -> rotation. Calibrated from your readings:
+	# normal landscape gravity=-y (y<0 -> none, y>0 -> inverted);
+	# portrait gravity on x (x<0 -> right, x>0 -> left). z dominant = flat, hold.
+	if   [ "$az" -ge "$ax" ] && [ "$az" -ge "$ay" ]; then rot=$prev
+	elif [ "$ay" -ge "$ax" ]; then [ "$y" -ge 0 ] && rot=inverted || rot=none
+	else [ "$x" -ge 0 ] && rot=left || rot=right
+	fi
+
+	if [ -n "$rot" ] && [ "$rot" != "$prev" ]; then
+		kscreen-doctor output."$OUT".rotation."$rot" >/dev/null 2>&1 && prev=$rot
+	fi
+	sleep "$POLL"
+done

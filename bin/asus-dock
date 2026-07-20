@@ -1,0 +1,67 @@
+#!/bin/bash
+# Z13 posture manager: desktop / laptop / tablet.
+#   desktop = ASUS dock hub present (0b05:1ac1)  -> external monitor
+#   laptop  = Z13 keyboard folio present (0b05:1a30)
+#   tablet  = neither
+# Touch is off only in desktop; on in laptop/tablet.
+# Tablet-mode / auto-rotate / scale will hook in here, gated on state=tablet.
+# Runs in the user session: udev rule (drm + ASUS usb add/remove) + login autostart
+# + a slow safety timer.
+set -u
+export XDG_RUNTIME_DIR=/run/user/"$(id -u)" DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/"$(id -u)"/bus
+DEST=org.kde.KWin; IF=org.kde.KWin.InputDevice
+LOG="$HOME/asus-dock.log"
+STATEF="$HOME/.cache/asus-dock-state"
+CACHE="$HOME/.cache/asus-dock-touch.path"
+NAME="ELAN9008:00 04F3:43C7"
+
+usb_present() {	# vid pid
+	for d in /sys/bus/usb/devices/*-*; do
+		[ -r "$d/idVendor" ] || continue
+		[ "$(cat "$d/idVendor" 2>/dev/null)" = "$1" ] && [ "$(cat "$d/idProduct" 2>/dev/null)" = "$2" ] && return 0
+	done
+	return 1
+}
+
+# --- 1. posture ---
+if   usb_present 0b05 1ac1; then state=desktop
+elif usb_present 0b05 1a30; then state=laptop
+else state=tablet; fi
+
+# --- 2. resolve touchscreen KWin object path (cached) ---
+ismytouch() {
+	local nm; nm=$(gdbus call --session --dest "$DEST" --object-path "$1" \
+		--method org.freedesktop.DBus.Properties.Get "$IF" name 2>/dev/null)
+	echo "$nm" | grep -q "$NAME" && ! echo "$nm" | grep -qi stylus
+}
+path=$(cat "$CACHE" 2>/dev/null)
+if [ -z "$path" ] || ! ismytouch "$path"; then
+	path=""
+	for p in $(qdbus6 "$DEST" 2>/dev/null | grep -E 'InputDevice/event'); do
+		ismytouch "$p" && { path="$p"; break; }
+	done
+	mkdir -p "${CACHE%/*}"; echo "$path" > "$CACHE"
+fi
+
+# --- 3. enforce profile (idempotent) ---
+want=$([ "$state" = desktop ] && echo false || echo true)   # touch off only when docked
+if [ -n "$path" ]; then
+	cur=$(gdbus call --session --dest "$DEST" --object-path "$path" \
+		--method org.freedesktop.DBus.Properties.Get "$IF" enabled 2>/dev/null)
+	if { [ "$want" = false ] && [[ "$cur" == *true* ]]; } || { [ "$want" = true ] && [[ "$cur" == *false* ]]; }; then
+		gdbus call --session --dest "$DEST" --object-path "$path" \
+			--method org.freedesktop.DBus.Properties.Set "$IF" enabled "<$want>" >/dev/null 2>&1
+	fi
+fi
+# --- 4. posture-transition changes (panel scale for bigger touch targets) + log ---
+prev=$(cat "$STATEF" 2>/dev/null)
+if [ "$state" != "$prev" ]; then
+	# Bigger touch targets on the internal panel while in tablet posture.
+	# Set scale ONLY for tablet/laptop — NEVER for desktop (docking): kscreen-doctor
+	# grabs the DRM device and races KWin's monitor-enable commit, which made the
+	# driver reject the dock output configuration. Docked keeps the prior scale.
+	if   [ "$state" = tablet ]; then kscreen-doctor output.eDP-1.scale.2   >/dev/null 2>&1
+	elif [ "$state" = laptop ]; then kscreen-doctor output.eDP-1.scale.1.7 >/dev/null 2>&1; fi
+	echo "$state" > "$STATEF"
+	echo "$(date '+%F %T') $state (touch=$want)" >> "$LOG"
+fi

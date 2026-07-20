@@ -1,0 +1,12 @@
+[Unit]
+Description=Z13 virtual tablet-mode switch (SW_TABLET_MODE)
+After=systemd-udevd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/z13-tablet-switch
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

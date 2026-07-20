@@ -1,0 +1,10 @@
+[Unit]
+Description=Toggle Z13 touchscreen by ASUS dock presence
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/asus-dock
+
+[Install]
+WantedBy=graphical-session.target

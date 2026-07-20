@@ -1,0 +1,4 @@
+# Permanently inhibit the folio keyboard touchpad (jumping-cursor firmware bug).
+# The touchpad sends phantom motion events; libinput cannot reliably filter them.
+# To re-enable: delete this file and run `sudo udevadm trigger` or reboot.
+ACTION=="add|change", SUBSYSTEM=="input", ATTR{name}=="ASUSTeK Computer Inc. GZ302EA-Keyboard Touchpad", ATTR{inhibited}="1"
