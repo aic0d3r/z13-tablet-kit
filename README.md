@@ -3,8 +3,8 @@
 Posture-aware tablet stack for the **ASUS ROG Flow Z13 (GZ302, AMD Strix Halo)** on
 **KDE Plasma 6 / Wayland** (Arch / CachyOS). Turns the Z13 into a proper 3-mode device:
 it detects whether you're **docked**, using the **keyboard folio (laptop)**, or holding it
-as a **tablet**, and adapts the touchscreen, on-screen keyboard, auto-rotate, and Plasma's
-tablet mode accordingly — with no kernel hacks and (almost) no root.
+as a **tablet**, and adapts the touchscreen, display, on-screen keyboard, auto-rotate, and
+Plasma's tablet mode accordingly — with no kernel hacks and (almost) no root.
 
 ## Posture model
 
@@ -21,10 +21,16 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
 - `asus-dock` (user) — computes posture from the dock hub / folio USB devices; toggles the
   internal touchscreen (ELAN9008) via KWin D-Bus `enabled`. Triggered by a udev rule
   (DRM hotplug + ASUS USB add/remove) that bridges into the session, plus a 30s safety timer
-  (the folio-detach USB event is unreliable on this device).
+  (the folio-detach USB event is unreliable on this device). Every run publishes the posture
+  to `z13ctl`; failed publications return an error and are retried rather than falling back
+  to direct display writes.
 - `z13-rotate` (user) — accelerometer auto-rotate of `eDP-1`, **tablet posture only**. Reads
   `accel_3d` directly (iio-sensor-proxy returns `undefined` for this sensor). Axis→rotation
-  mapping is calibrated to the GZ302 panel mount.
+  mapping is calibrated to the GZ302 panel mount and rotation is published through `z13ctl`.
+- `z13ctl` display coordinator — owns all KScreen changes. Desktop and laptop use scale `1.5`,
+  tablet posture uses scale `2.0`; this kit never invokes `kscreen-doctor` directly. Dock
+  posture waits ten seconds for DRM topology to settle. External outputs remain entirely
+  KDE-owned, and a disabled internal panel is never reconfigured.
 - `z13-tablet-switch` (root) — creates a virtual `SW_TABLET_MODE` uinput switch flipped on
   only in tablet posture. This is what engages **Plasma's real tablet mode** (bigger
   panel/buttons, auto OSK, maximized windows) — the GZ302's WMI path advertises the switch
@@ -40,6 +46,9 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
 ## Requirements
 
 - KDE Plasma 6 / Wayland, systemd, Arch or CachyOS.
+- `z13ctl` with the display coordinator commands available.
+- `keyd`; installation preserves `/etc/keyd/default.conf` once, then marks the Z13 keyboard
+  IDs as keyboard interfaces. Uninstall restores that exact backup and reloads keyd.
 - `python-evdev` (official repo) — for the uinput switch and touch scroll.
 - `maliit-keyboard` (AUR) — for the OSK.
 - User not in `uinput` group, so `z13-tablet-switch` runs as a root system service.
@@ -57,7 +66,11 @@ cd ~/z13-tablet-kit
 ./uninstall.sh      # removes everything (leaves maliit-keyboard installed)
 ```
 
-Logs/state: `tail ~/asus-dock.log`, `cat ~/.cache/asus-dock-state`.
+Uninstall requests laptop defaults (scale 1.5, normal rotation, touchscreen on,
+tablet mode off), uninhibits the folio touchpad, and restores the exact keyd
+configuration backed up by the installer.
+
+Logs/state: `tail ~/asus-dock.log`, `cat "$XDG_RUNTIME_DIR/z13-tablet-kit/posture"`.
 
 ## Notes / optional tweaks
 

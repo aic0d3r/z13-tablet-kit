@@ -4,16 +4,20 @@
 #   laptop  = Z13 keyboard folio present (0b05:1a30)
 #   tablet  = neither
 # Touch is off only in desktop; on in laptop/tablet.
-# Tablet-mode / auto-rotate / scale will hook in here, gated on state=tablet.
+# Display policy is applied by the z13ctl daemon.
 # Runs in the user session: udev rule (drm + ASUS usb add/remove) + login autostart
 # + a slow safety timer.
 set -u
-export XDG_RUNTIME_DIR=/run/user/"$(id -u)" DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/"$(id -u)"/bus
+runtime_uid=$(id -u)
+export XDG_RUNTIME_DIR=/run/user/"$runtime_uid" DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/"$runtime_uid"/bus
 DEST=org.kde.KWin; IF=org.kde.KWin.InputDevice
 LOG="$HOME/asus-dock.log"
-STATEF="$HOME/.cache/asus-dock-state"
+RUNDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/z13-tablet-kit"
+STATEF="$RUNDIR/posture"
 CACHE="$HOME/.cache/asus-dock-touch.path"
 NAME="ELAN9008:00 04F3:43C7"
+Z13CTL="$HOME/.local/bin/z13ctl"
+if [ ! -x "$Z13CTL" ]; then Z13CTL=$(command -v z13ctl 2>/dev/null || true); fi
 
 usb_present() {	# vid pid
 	for d in /sys/bus/usb/devices/*-*; do
@@ -27,6 +31,16 @@ usb_present() {	# vid pid
 if   usb_present 0b05 1ac1; then state=desktop
 elif usb_present 0b05 1a30; then state=laptop
 else state=tablet; fi
+
+mkdir -p "$RUNDIR"
+chmod 700 "$RUNDIR"
+prev=$(cat "$STATEF" 2>/dev/null)
+
+# Publish on every invocation so the timer naturally retries daemon failures.
+publish_ok=true
+if [ -z "$Z13CTL" ] || ! "$Z13CTL" display posture "$state"; then
+	publish_ok=false
+fi
 
 # --- 2. resolve touchscreen KWin object path (cached) ---
 ismytouch() {
@@ -53,15 +67,18 @@ if [ -n "$path" ]; then
 			--method org.freedesktop.DBus.Properties.Set "$IF" enabled "<$want>" >/dev/null 2>&1
 	fi
 fi
-# --- 4. posture-transition changes (panel scale for bigger touch targets) + log ---
-prev=$(cat "$STATEF" 2>/dev/null)
-if [ "$state" != "$prev" ]; then
-	# Bigger touch targets on the internal panel while in tablet posture.
-	# Set scale ONLY for tablet/laptop — NEVER for desktop (docking): kscreen-doctor
-	# grabs the DRM device and races KWin's monitor-enable commit, which made the
-	# driver reject the dock output configuration. Docked keeps the prior scale.
-	if   [ "$state" = tablet ]; then kscreen-doctor output.eDP-1.scale.2   >/dev/null 2>&1
-	elif [ "$state" = laptop ]; then kscreen-doctor output.eDP-1.scale.1.7 >/dev/null 2>&1; fi
-	echo "$state" > "$STATEF"
-	echo "$(date '+%F %T') $state (touch=$want)" >> "$LOG"
+# --- 4. log the result; a failed publish makes the service retryable ---
+if [ "$publish_ok" = true ]; then
+	tmp="$STATEF.tmp.$$"
+	if ! printf '%s\n' "$state" > "$tmp" || ! mv -f "$tmp" "$STATEF"; then
+		rm -f "$tmp"
+		echo "$(date '+%F %T') $state pending (posture state write failed, touch=$want)" >> "$LOG"
+		exit 1
+	fi
+	if [ "$state" != "$prev" ]; then
+		echo "$(date '+%F %T') $state (touch=$want)" >> "$LOG"
+	fi
+else
+	echo "$(date '+%F %T') $state pending (z13ctl unavailable, touch=$want)" >> "$LOG"
+	exit 1
 fi

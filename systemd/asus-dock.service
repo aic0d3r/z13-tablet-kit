@@ -5,6 +5,8 @@ After=graphical-session.target
 [Service]
 Type=oneshot
 ExecStart=%h/.local/bin/asus-dock
+Restart=on-failure
+RestartSec=2
 
 [Install]
 WantedBy=graphical-session.target

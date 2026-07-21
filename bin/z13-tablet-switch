@@ -8,6 +8,7 @@ it ON only in tablet posture (undocked AND no keyboard folio), so Plasma engages
 its real tablet mode. Runs as root (needs /dev/uinput).
 """
 import glob
+import signal
 import time
 from evdev import UInput, ecodes
 
@@ -35,14 +36,25 @@ def tablet_posture():
 
 def main():
     ui = UInput(events={ecodes.EV_SW: [SW]}, name="z13-tablet-switch")
+    stopping = False
+
+    def stop(_signum, _frame):
+        nonlocal stopping
+        stopping = True
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
     cur = None
-    while True:
+    while not stopping:
         want = 1 if tablet_posture() else 0
         if want != cur:
             ui.write(ecodes.EV_SW, SW, want)
             ui.syn()
             cur = want
         time.sleep(POLL)
+    ui.write(ecodes.EV_SW, SW, 0)
+    ui.syn()
+    ui.close()
 
 
 if __name__ == "__main__":

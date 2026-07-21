@@ -1,14 +1,15 @@
 #!/bin/bash
 # Auto-rotate the Z13 internal panel from the accelerometer — ONLY in tablet posture.
-# Reads posture from ~/.cache/asus-dock-state (written by asus-dock). When not tablet,
-# forces eDP-1 back to normal. Axis->rotation mapping may need flipping for your unit's
+# Reads runtime posture published by asus-dock. When not tablet, requests normal
+# rotation. Axis->rotation mapping may need flipping for your unit's
 # sensor mount; hold the tablet and use the calibration note at the bottom to tune.
 set -u
-export XDG_RUNTIME_DIR=/run/user/"$(id -u)" DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/"$(id -u)"/bus
+runtime_uid=$(id -u)
+export XDG_RUNTIME_DIR=/run/user/"$runtime_uid" DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/"$runtime_uid"/bus
 DEV=/sys/bus/iio/devices/iio:device0
-STATEF="$HOME/.cache/asus-dock-state"
-OUT=eDP-1
-THR=500        # ~0.5g raw threshold for "dominant axis"
+STATEF="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/z13-tablet-kit/posture"
+Z13CTL="$HOME/.local/bin/z13ctl"
+if [ ! -x "$Z13CTL" ]; then Z13CTL=$(command -v z13ctl 2>/dev/null || true); fi
 POLL=2         # seconds between samples
 prev=none
 
@@ -17,12 +18,10 @@ abs() { local v="${1:-0}"; [ "$v" -lt 0 ] && echo $((0 - v)) || echo "$v"; }
 while :; do
 	posture=$(cat "$STATEF" 2>/dev/null)
 	if [ "$posture" != tablet ]; then
-		# Force landscape ONLY when we last set a non-none rotation. Calling
-		# kscreen-doctor every poll grabbed the DRM device continuously and raced
-		# KWin's monitor hotplug ("driver rejected output configuration") on dock.
+		# Posture publication also requests laptop/desktop defaults, so only undo a
+		# rotation that this process successfully requested.
 		if [ "$prev" != none ]; then
-			kscreen-doctor output."$OUT".rotation.none >/dev/null 2>&1 || true
-			prev=none
+			[ -n "$Z13CTL" ] && "$Z13CTL" display rotation none >/dev/null 2>&1 && prev=none
 		fi
 		sleep "$POLL"; continue
 	fi
@@ -42,7 +41,7 @@ while :; do
 	fi
 
 	if [ -n "$rot" ] && [ "$rot" != "$prev" ]; then
-		kscreen-doctor output."$OUT".rotation."$rot" >/dev/null 2>&1 && prev=$rot
+		[ -n "$Z13CTL" ] && "$Z13CTL" display rotation "$rot" >/dev/null 2>&1 && prev=$rot
 	fi
 	sleep "$POLL"
 done
