@@ -19,14 +19,15 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
 ## Components
 
 - `asus-dock` (user) — computes posture from the dock hub / folio USB devices; toggles the
-  internal touchscreen (ELAN9008) via KWin D-Bus `enabled`. Triggered by a udev rule
+  internal touchscreen (ELAN9008) via KWin D-Bus `enabled`. A non-eDP external display also
+  counts as `desktop`, so any USB-C dock or HDMI cable works. Triggered by a udev rule
   (DRM hotplug + ASUS USB add/remove) that bridges into the session, plus a 30s safety timer
   (the folio-detach USB event is unreliable on this device). Every run publishes the posture
   to `z13ctl`; failed publications return an error and are retried rather than falling back
   to direct display writes.
-- `z13-rotate` (user) — accelerometer auto-rotate of `eDP-1`, **tablet posture only**. Reads
-  `accel_3d` directly (iio-sensor-proxy returns `undefined` for this sensor). Axis→rotation
-  mapping is calibrated to the GZ302 panel mount and rotation is published through `z13ctl`.
+- **Auto-rotate** — Plasma-native, gated on the virtual `SW_TABLET_MODE` switch below.
+  `iio-sensor-proxy` (default on CachyOS) reads the accel; enable once via Quick Settings →
+  Auto-rotate → right-click → "Rotate only in tablet mode". No kit daemon needed.
 - `z13ctl` display coordinator — owns all KScreen changes. Desktop and laptop use scale `1.5`,
   tablet posture uses scale `2.0`; this kit never invokes `kscreen-doctor` directly. Dock
   posture waits ten seconds for DRM topology to settle. External outputs remain entirely
@@ -46,6 +47,7 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
 ## Requirements
 
 - KDE Plasma 6 / Wayland, systemd, Arch or CachyOS.
+- `iio-sensor-proxy` (default on CachyOS) — for Plasma auto-rotate.
 - `z13ctl` with the display coordinator commands available.
 - `keyd`; installation preserves `/etc/keyd/default.conf` once, then marks the Z13 keyboard
   IDs as keyboard interfaces. Uninstall restores that exact backup and reloads keyd.
@@ -64,6 +66,8 @@ paru -S maliit-keyboard
 cd ~/z13-tablet-kit
 ./install.sh        # idempotent; uses sudo for the udev rule + tablet-switch service
 ./uninstall.sh      # removes everything (leaves maliit-keyboard installed)
+# Then enable auto-rotate once: Quick Settings → Auto-rotate → right-click →
+# "Rotate only in tablet mode". The kit's virtual SW_TABLET_MODE gates it.
 ```
 
 Uninstall requests laptop defaults (scale 1.5, normal rotation, touchscreen on,
@@ -82,8 +86,9 @@ Logs/state: `tail ~/asus-dock.log`, `cat "$XDG_RUNTIME_DIR/z13-tablet-kit/postur
   keycaps, but **Fn+Up / Fn+Down** are mapped at firmware level and work everywhere.
 - **3-finger gestures** are reserved by KWin (desktop overview / virtual desktop
   switching). Touch scroll deliberately uses 2 fingers to avoid conflict.
-- **Auto-rotate mapping:** if portrait directions come out mirrored on another unit, swap the
-  `x<0 → right / x>0 → left` pair in `bin/z13-rotate`.
+- **Auto-rotate:** driven by Plasma + `iio-sensor-proxy`, gated by the virtual tablet-mode
+  switch. If a portrait direction comes out mirrored on another unit, that's a sensor-mount
+  quirk to fix in `iio-sensor-proxy`, not this kit.
 - **Tablet gestures (recommended Plasma defaults, applied to `~/.config/kwinrc`):**
   - Overview effect enabled (`[Plugins] overviewEnabled=true`). Enables the touchpad
     3-finger defaults too: swipe up → Overview, left/right → switch virtual desktop.
@@ -102,4 +107,4 @@ Logs/state: `tail ~/asus-dock.log`, `cat "$XDG_RUNTIME_DIR/z13-tablet-kit/postur
 
 The virtual `SW_TABLET_MODE` idea follows [m4rw3r/z13-tablet-switch](https://github.com/m4rw3r/z13-tablet-switch);
 this kit reuses the concept but adds **dock awareness** (so tablet mode never engages while
-docked) and unifies it with posture + rotate + touch in one stack.
+docked) and unifies it with posture + touch in one stack.

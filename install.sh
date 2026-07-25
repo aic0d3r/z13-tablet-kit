@@ -1,8 +1,9 @@
 #!/bin/bash
 # z13-tablet-kit — installer
 # ASUS ROG Flow Z13 (GZ302, Strix Halo) posture + tablet stack for KDE Plasma/Wayland.
-# Installs: posture manager (desktop/laptop/tablet) + touch toggle, auto-rotate,
+# Installs: posture manager (desktop/laptop/tablet) + touch toggle,
 # virtual SW_TABLET_MODE switch (real Plasma tablet mode), and the OSK hook.
+# Auto-rotate is Plasma-native: enable "Auto-rotate → only in tablet mode" once.
 # Idempotent — safe to re-run. Run as your normal user (uses sudo for system bits).
 set -euo pipefail
 KIT="$(cd "$(dirname "$0")" && pwd)"
@@ -26,18 +27,17 @@ if [ ! -x "$Z13CTL" ]; then Z13CTL=$(command -v z13ctl 2>/dev/null || true); fi
 command -v keyd >/dev/null || { echo "ERROR: keyd required"; exit 1; }
 pacman -Q python-evdev >/dev/null 2>&1 || { echo "ERROR: python-evdev required  ->  sudo pacman -S python-evdev"; exit 1; }
 pacman -Q maliit-keyboard >/dev/null 2>&1 || echo "NOTE: on-screen keyboard not installed  ->  paru -S maliit-keyboard"
+pacman -Q iio-sensor-proxy >/dev/null 2>&1 || echo "NOTE: iio-sensor-proxy not installed (Plasma auto-rotate needs it)  ->  sudo pacman -S iio-sensor-proxy"
 if [ ! -r "$KEYD_CONF" ]; then
 	echo "ERROR: $KEYD_CONF not found or unreadable"
 	exit 1
 fi
 
-# --- user components (posture manager + auto-rotate + touch scroll) ---
+# --- user components (posture manager + touch scroll) ---
 install -Dm755 "$KIT/bin/asus-dock"                 "$BIN/asus-dock"
-install -Dm755 "$KIT/bin/z13-rotate"                "$BIN/z13-rotate"
 install -Dm755 "$KIT/bin/z13-touch-scroll"          "$BIN/z13-touch-scroll"
 install -Dm644 "$KIT/systemd/asus-dock.service"     "$UNITS/asus-dock.service"
 install -Dm644 "$KIT/systemd/asus-dock.timer"       "$UNITS/asus-dock.timer"
-install -Dm644 "$KIT/systemd/z13-rotate.service"    "$UNITS/z13-rotate.service"
 install -Dm644 "$KIT/systemd/z13-touch-scroll.service" "$UNITS/z13-touch-scroll.service"
 
 # --- system components (udev rules + virtual tablet-mode switch) ---
@@ -65,17 +65,16 @@ sudo udevadm trigger --subsystem-match=input
 sudo systemctl daemon-reload
 systemctl --user enable --now asus-dock.service
 systemctl --user enable --now asus-dock.timer
-systemctl --user enable --now z13-rotate.service
 systemctl --user enable --now z13-touch-scroll.service
 sudo systemctl enable --now z13-tablet-switch
-systemctl --user restart z13-rotate.service z13-touch-scroll.service
+systemctl --user restart z13-touch-scroll.service
 sudo systemctl restart z13-tablet-switch
 systemctl --user start asus-dock.service
 
 echo "==> Done. Active now:"
 echo "    • desktop/laptop/tablet posture + touch toggle   (asus-dock)"
-echo "    • accelerometer auto-rotate (tablet only)        (z13-rotate)"
 echo "    • Plasma tablet mode via virtual SW_TABLET_MODE  (z13-tablet-switch)"
 echo "    • 2-finger touch scroll everywhere               (z13-touch-scroll)"
 echo "    • folio touchpad disabled (jumping-cursor bug)   (udev inhibited)"
+echo "    Enable once: Quick Settings → Auto-rotate → right-click → 'Rotate only in tablet mode'"
 echo "    Log: tail ~/asus-dock.log   |   posture: cat ${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/z13-tablet-kit/posture"
