@@ -32,7 +32,7 @@ usb_present() {	# vid pid
 ext_display_present() {
 	for s in /sys/class/drm/card*-*; do
 		[ -r "$s/status" ] || continue
-		case "${s##*/}" in eDP-*) continue;; esac
+		case "${s##*/}" in *eDP*|*DSI*) continue;; esac
 		[ "$(cat "$s/status" 2>/dev/null)" = connected ] && return 0
 	done
 	return 1
