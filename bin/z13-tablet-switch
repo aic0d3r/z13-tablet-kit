@@ -30,8 +30,21 @@ def usb(vid, pid):
     return False
 
 
+def ext_display_present():
+    """Any non-eDP DRM connector connected (generic USB-C/HDMI dock fallback)."""
+    for d in glob.glob("/sys/class/drm/card*-*"):
+        if d.rsplit("/", 1)[-1].startswith("eDP-"):
+            continue
+        try:
+            if open(f"{d}/status").read().strip() == "connected":
+                return True
+        except OSError:
+            pass
+    return False
+
+
 def tablet_posture():
-    return not usb(*DOCK) and not usb(*FOLIO)
+    return not (usb(*DOCK) or ext_display_present()) and not usb(*FOLIO)
 
 
 def main():

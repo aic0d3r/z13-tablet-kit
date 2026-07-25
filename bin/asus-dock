@@ -27,8 +27,19 @@ usb_present() {	# vid pid
 	return 1
 }
 
+# External display on any non-eDP DRM connector (generic USB-C/HDMI dock fallback).
+# Passive sysfs read — no atomic commit, safe during MST link training.
+ext_display_present() {
+	for s in /sys/class/drm/card*-*; do
+		[ -r "$s/status" ] || continue
+		case "${s##*/}" in eDP-*) continue;; esac
+		[ "$(cat "$s/status" 2>/dev/null)" = connected ] && return 0
+	done
+	return 1
+}
+
 # --- 1. posture ---
-if   usb_present 0b05 1ac1; then state=desktop
+if   usb_present 0b05 1ac1 || ext_display_present; then state=desktop
 elif usb_present 0b05 1a30; then state=laptop
 else state=tablet; fi
 
