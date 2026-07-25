@@ -33,9 +33,12 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
   posture waits ten seconds for DRM topology to settle. External outputs remain entirely
   KDE-owned, and a disabled internal panel is never reconfigured.
 - `z13-tablet-switch` (root) — creates a virtual `SW_TABLET_MODE` uinput switch flipped on
-  only in tablet posture. This is what engages **Plasma's real tablet mode** (bigger
-  panel/buttons, auto OSK, maximized windows) — the GZ302's WMI path advertises the switch
-  but never emits it.
+  only in tablet posture. The GZ302's WMI path advertises the switch but never emits it, so
+  without this daemon Plasma never enters tablet mode. The switch now gates two things this
+  kit depends on: the auto on-screen keyboard, and — after the move to Plasma-native
+  auto-rotate — "rotate only in tablet mode". (Plasma 6.7 intentionally dropped the old
+  "force bigger UI in tablet mode" behavior, [bugs.kde.org #521550](https://bugs.kde.org/show_bug.cgi?id=521550);
+  tablet mode is a logic signal, not a visual restyle.)
 - `z13-touch-scroll` (user) — reads the ELAN9008 touchscreen and detects 2-finger vertical
   swipes, injecting mouse wheel events via evdev UInput. Works in **any** app: terminal
   scrollback, opencode TUI, browsers, document viewers. Single-finger touch is left to the
