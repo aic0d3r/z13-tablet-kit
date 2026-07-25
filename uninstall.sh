@@ -12,7 +12,8 @@ if [ ! -x "$Z13CTL" ]; then Z13CTL=$(command -v z13ctl 2>/dev/null || true); fi
 echo "==> removing z13-tablet-kit"
 
 # Stop publishers before sending final intent so they cannot overwrite it.
-systemctl --user disable --now asus-dock.service asus-dock.timer z13-touch-scroll.service 2>/dev/null || true
+systemctl --user disable --now asus-dock.service asus-dock.timer z13-tablet-switch.service z13-touch-scroll.service 2>/dev/null || true
+# Legacy: older kit versions installed z13-tablet-switch as a root service.
 sudo systemctl disable --now z13-tablet-switch 2>/dev/null || true
 
 if [ -n "$Z13CTL" ]; then
@@ -33,15 +34,16 @@ for path in $(qdbus6 "$DEST" 2>/dev/null | grep -E 'InputDevice/event'); do
 	fi
 done
 
-sudo rm -f /etc/systemd/system/z13-tablet-switch.service \
-            /etc/udev/rules.d/99-asus-dock.rules \
+sudo rm -f /etc/udev/rules.d/99-asus-dock.rules \
             /etc/udev/rules.d/99-elan-touchscreen-uaccess.rules \
-            /etc/udev/rules.d/99-disable-asus-touchpad.rules \
-            /usr/local/bin/z13-tablet-switch
-rm -f ~/.local/bin/asus-dock ~/.local/bin/z13-touch-scroll \
+            /etc/udev/rules.d/99-disable-asus-touchpad.rules
+rm -f ~/.local/bin/asus-dock ~/.local/bin/z13-tablet-switch ~/.local/bin/z13-touch-scroll \
       ~/.config/systemd/user/asus-dock.service \
       ~/.config/systemd/user/asus-dock.timer \
+      ~/.config/systemd/user/z13-tablet-switch.service \
       ~/.config/systemd/user/z13-touch-scroll.service
+# Legacy cleanup: older kit versions installed these as root.
+sudo rm -f /usr/local/bin/z13-tablet-switch /etc/systemd/system/z13-tablet-switch.service
 # Drop any legacy z13-rotate left by a previous install of this kit.
 rm -f ~/.local/bin/z13-rotate ~/.config/systemd/user/z13-rotate.service
 rm -f ~/.cache/asus-dock-state ~/.cache/asus-dock-touch.path

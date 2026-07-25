@@ -3,8 +3,8 @@
 Posture-aware tablet stack for the **ASUS ROG Flow Z13 (GZ302, AMD Strix Halo)** on
 **KDE Plasma 6 / Wayland** (Arch / CachyOS). Turns the Z13 into a proper 3-mode device:
 it detects whether you're **docked**, using the **keyboard folio (laptop)**, or holding it
-as a **tablet**, and adapts the touchscreen, display, on-screen keyboard, auto-rotate, and
-Plasma's tablet mode accordingly — with no kernel hacks and (almost) no root.
+as a **tablet**, and adapts the touchscreen, display, and auto-rotate accordingly — with no
+kernel hacks and only three udev rules needing root.
 
 ## Posture model
 
@@ -32,13 +32,14 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
   tablet posture uses scale `2.0`; this kit never invokes `kscreen-doctor` directly. Dock
   posture waits ten seconds for DRM topology to settle. External outputs remain entirely
   KDE-owned, and a disabled internal panel is never reconfigured.
-- `z13-tablet-switch` (root) — creates a virtual `SW_TABLET_MODE` uinput switch flipped on
+- `z13-tablet-switch` (user) — creates a virtual `SW_TABLET_MODE` uinput switch flipped on
   only in tablet posture. The GZ302's WMI path advertises the switch but never emits it, so
-  without this daemon Plasma never enters tablet mode. The switch now gates two things this
-  kit depends on: the auto on-screen keyboard, and — after the move to Plasma-native
-  auto-rotate — "rotate only in tablet mode". (Plasma 6.7 intentionally dropped the old
-  "force bigger UI in tablet mode" behavior, [bugs.kde.org #521550](https://bugs.kde.org/show_bug.cgi?id=521550);
-  tablet mode is a logic signal, not a visual restyle.)
+  without this daemon Plasma's "rotate only in tablet mode" checkbox has nothing to gate on
+  and the screen won't auto-rotate in tablet posture. Runs as a **user service** (logind
+  grants `/dev/uinput` to the active session, same mechanism as `z13-touch-scroll`). This is
+  the daemon's *only* job — the on-screen keyboard is a separate Plasma setting that pops on
+  touch with no tablet-mode signal needed. (Plasma 6.7 intentionally dropped the old "force
+  bigger UI in tablet mode" behavior, [bugs.kde.org #521550](https://bugs.kde.org/show_bug.cgi?id=521550).)
 - `z13-touch-scroll` (user) — reads the ELAN9008 touchscreen and detects 2-finger vertical
   swipes, injecting mouse wheel events via evdev UInput. Works in **any** app: terminal
   scrollback, opencode TUI, browsers, document viewers. Single-finger touch is left to the
@@ -56,10 +57,9 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
   IDs as keyboard interfaces. Uninstall restores that exact backup and reloads keyd.
 - `python-evdev` (official repo) — for the uinput switch and touch scroll.
 - `maliit-keyboard` (AUR) — for the OSK.
-- User not in `uinput` group, so `z13-tablet-switch` runs as a root system service.
+- `/dev/uinput` write access for `z13-tablet-switch` and `z13-touch-scroll` is auto-granted
+  by logind for the active graphical session — no group membership, no root daemon.
 - Touchscreen read access is granted via a udev `uaccess` rule (logind auto-sets ACL).
-- `/dev/uinput` write access for `z13-touch-scroll` is auto-granted by logind for the
-  active session (no group membership needed).
 
 ## Install / uninstall
 
@@ -67,7 +67,7 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
 sudo pacman -S python-evdev
 paru -S maliit-keyboard
 cd ~/z13-tablet-kit
-./install.sh        # idempotent; uses sudo for the udev rule + tablet-switch service
+./install.sh        # idempotent; uses sudo only for udev rules
 ./uninstall.sh      # removes everything (leaves maliit-keyboard installed)
 # Then enable auto-rotate once: Quick Settings → Auto-rotate → right-click →
 # "Rotate only in tablet mode". The kit's virtual SW_TABLET_MODE gates it.

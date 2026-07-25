@@ -2,9 +2,10 @@
 # z13-tablet-kit — installer
 # ASUS ROG Flow Z13 (GZ302, Strix Halo) posture + tablet stack for KDE Plasma/Wayland.
 # Installs: posture manager (desktop/laptop/tablet) + touch toggle,
-# virtual SW_TABLET_MODE switch (real Plasma tablet mode), and the OSK hook.
-# Auto-rotate is Plasma-native: enable "Auto-rotate → only in tablet mode" once.
-# Idempotent — safe to re-run. Run as your normal user (uses sudo for system bits).
+# a virtual SW_TABLET_MODE switch (gates Plasma auto-rotate to tablet posture),
+# and 2-finger touch scroll. Auto-rotate itself is Plasma-native: enable
+# "Auto-rotate → only in tablet mode" once.
+# Idempotent — safe to re-run. Run as your normal user (only udev rules use sudo).
 set -euo pipefail
 KIT="$(cd "$(dirname "$0")" && pwd)"
 BIN="$HOME/.local/bin"
@@ -33,21 +34,27 @@ if [ ! -r "$KEYD_CONF" ]; then
 	exit 1
 fi
 
-# --- user components (posture manager + touch scroll) ---
+# --- user components (posture manager + tablet switch + touch scroll) ---
 install -Dm755 "$KIT/bin/asus-dock"                 "$BIN/asus-dock"
+install -Dm755 "$KIT/bin/z13-tablet-switch"         "$BIN/z13-tablet-switch"
 install -Dm755 "$KIT/bin/z13-touch-scroll"          "$BIN/z13-touch-scroll"
 install -Dm644 "$KIT/systemd/asus-dock.service"     "$UNITS/asus-dock.service"
 install -Dm644 "$KIT/systemd/asus-dock.timer"       "$UNITS/asus-dock.timer"
+install -Dm644 "$KIT/systemd/z13-tablet-switch.service" "$UNITS/z13-tablet-switch.service"
 install -Dm644 "$KIT/systemd/z13-touch-scroll.service" "$UNITS/z13-touch-scroll.service"
 
-# --- system components (udev rules + virtual tablet-mode switch) ---
+# --- system components (udev rules only; the switch runs in-user via logind) ---
+# Legacy migration: a previous kit version installed z13-tablet-switch as root.
+if [ -e /usr/local/bin/z13-tablet-switch ] || [ -e /etc/systemd/system/z13-tablet-switch.service ]; then
+	sudo systemctl disable --now z13-tablet-switch 2>/dev/null || true
+	sudo rm -f /usr/local/bin/z13-tablet-switch /etc/systemd/system/z13-tablet-switch.service
+	sudo systemctl daemon-reload
+fi
 sed -E "s/(--machine=)[^@]+(@\.host)/\1$CURRENT_USER\2/g" \
 	"$KIT/udev/99-asus-dock.rules" > "$RULE_TMP"
-sudo install -Dm755 "$KIT/bin/z13-tablet-switch"             "/usr/local/bin/z13-tablet-switch"
-sudo install -Dm644 "$KIT/systemd/z13-tablet-switch.service" "/etc/systemd/system/z13-tablet-switch.service"
-sudo install -Dm644 "$RULE_TMP"                               "/etc/udev/rules.d/99-asus-dock.rules"
-sudo install -Dm644 "$KIT/udev/99-elan-touchscreen-uaccess.rules" "/etc/udev/rules.d/99-elan-touchscreen-uaccess.rules"
-sudo install -Dm644 "$KIT/udev/99-disable-asus-touchpad.rules"    "/etc/udev/rules.d/99-disable-asus-touchpad.rules"
+sudo install -Dm644 "$RULE_TMP"                                    "/etc/udev/rules.d/99-asus-dock.rules"
+sudo install -Dm644 "$KIT/udev/99-elan-touchscreen-uaccess.rules"  "/etc/udev/rules.d/99-elan-touchscreen-uaccess.rules"
+sudo install -Dm644 "$KIT/udev/99-disable-asus-touchpad.rules"     "/etc/udev/rules.d/99-disable-asus-touchpad.rules"
 
 # Classify these exact IDs as keyboard interfaces in keyd.
 if ! sudo test -e "$KEYD_BACKUP"; then
@@ -62,18 +69,16 @@ sudo keyd reload
 systemctl --user daemon-reload
 sudo udevadm control --reload-rules
 sudo udevadm trigger --subsystem-match=input
-sudo systemctl daemon-reload
 systemctl --user enable --now asus-dock.service
 systemctl --user enable --now asus-dock.timer
+systemctl --user enable --now z13-tablet-switch.service
 systemctl --user enable --now z13-touch-scroll.service
-sudo systemctl enable --now z13-tablet-switch
-systemctl --user restart z13-touch-scroll.service
-sudo systemctl restart z13-tablet-switch
+systemctl --user restart z13-tablet-switch.service z13-touch-scroll.service
 systemctl --user start asus-dock.service
 
 echo "==> Done. Active now:"
 echo "    • desktop/laptop/tablet posture + touch toggle   (asus-dock)"
-echo "    • Plasma tablet mode via virtual SW_TABLET_MODE  (z13-tablet-switch)"
+echo "    • posture-gated auto-rotate via virtual switch   (z13-tablet-switch)"
 echo "    • 2-finger touch scroll everywhere               (z13-touch-scroll)"
 echo "    • folio touchpad disabled (jumping-cursor bug)   (udev inhibited)"
 echo "    Enable once: Quick Settings → Auto-rotate → right-click → 'Rotate only in tablet mode'"

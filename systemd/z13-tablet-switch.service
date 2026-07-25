@@ -1,12 +1,11 @@
 [Unit]
-Description=Z13 virtual tablet-mode switch (SW_TABLET_MODE)
-After=systemd-udevd.service
+Description=z13 tablet-mode virtual switch (SW_TABLET_MODE → posture-gated auto-rotate)
+After=graphical-session.target
 
 [Service]
-Type=simple
-ExecStart=/usr/local/bin/z13-tablet-switch
+ExecStart=%h/.local/bin/z13-tablet-switch
 Restart=on-failure
-RestartSec=5
+RestartSec=3
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical-session.target
