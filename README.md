@@ -38,19 +38,25 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
   keyboard remains a separate Plasma setting that needs no tablet-mode signal. (Plasma 6.7
   intentionally dropped the old "force bigger UI in tablet mode" behavior,
   [bugs.kde.org #521550](https://bugs.kde.org/show_bug.cgi?id=521550).)
+- `z13gui-plus` (optional) — shows live posture and health when the kit is active and exposes
+  desktop touch policy, guarded folio-touchpad opt-in, and 1–5 touch-scroll controls. Settings
+  are persisted by `z13ctl-plus` and apply without service restarts.
 - `z13-touch-scroll` (user) — reads the ELAN9008 touchscreen and detects 2-finger vertical
   swipes, injecting mouse wheel events via evdev UInput. Works in **any** app: terminal
-  scrollback, opencode TUI, browsers, document viewers. Single-finger touch is left to the
-  app/terminal (Konsole scrolls natively; other terminals treat it as text selection).
+  scrollback, opencode TUI, browsers, document viewers, and is disabled in desktop posture.
+  Single-finger touch is left to the app/terminal (Konsole scrolls natively; other terminals
+  treat it as text selection).
 - `maliit-keyboard` — on-screen keyboard (AUR), auto-pops on touch-focus.
-- **Folio touchpad** is permanently inhibited via a udev rule (`inhibited=1`) — the GZ302EA
-  folio touchpad has a firmware jumping-cursor bug that libinput cannot filter.
+- **Folio touchpad** defaults to inhibited via udev because its firmware emits jumping-cursor
+  events that libinput cannot filter. Members of `users` can explicitly opt in through
+  `z13gui-plus`; every enable presents a warning.
 
 ## Requirements
 
 - KDE Plasma 6 / Wayland, systemd, Arch or CachyOS (`kscreen-doctor`, `qdbus6`, and `gdbus`).
 - `iio-sensor-proxy` (default on CachyOS) — for Plasma auto-rotate.
 - `z13ctl-plus` with its user socket and display coordinator commands available.
+- Membership in `users` (configured by `z13ctl-plus setup`) for the guarded touchpad toggle.
 - `python-evdev` (official repo) — for the uinput switch and touch scroll.
 - `maliit-keyboard` (AUR) — for the OSK.
 - `/dev/uinput` write access for `z13-tablet-switch` and `z13-touch-scroll` is auto-granted
@@ -78,9 +84,8 @@ Logs/state: `journalctl --user -u z13-tablet-switch`,
 ## Notes / optional tweaks
 
 - **Touch scrolling:** 2-finger vertical swipe scrolls any focused app (terminal,
-  browser, opencode TUI). Tunable in `bin/z13-touch-scroll`: `STEP` (swipe distance
-  per wheel notch, default 90 out of 2064) and `NOTCHES_PER_STEP` (wheel events per
-  notch, default 2). Increase either for faster scroll.
+  browser, opencode TUI). `z13gui-plus` exposes sensitivity and speed levels 1–5;
+  defaults 3 and 2 preserve the original behavior.
 - **Page Up/Down without dedicated keys:** the Z13 folio keyboard has no Page Up/Down
   keycaps, but **Fn+Up / Fn+Down** are mapped at firmware level and work everywhere.
 - **3-finger gestures** are reserved by KWin (desktop overview / virtual desktop

@@ -13,13 +13,18 @@ write access is auto-granted by logind for the active session.
 Tuning: edit STEP / NOTCHES_PER_STEP below.
 """
 
-import evdev
+import json
+import os
 import sys
+
+import evdev
 
 TOUCHSCREEN_NAME = "ELAN9008:00 04F3:43C7"
 MIN_FINGERS = 2
-STEP = 90               # pixels of swipe per wheel notch (Y range 0–2064)
-NOTCHES_PER_STEP = 2    # wheel events per step (higher = more scroll)
+SENSITIVITY_STEPS = {1: 180, 2: 135, 3: 90, 4: 60, 5: 30}
+RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+POSTURE_FILE = os.path.join(RUNTIME_DIR, "z13-tablet-kit/posture")
+SETTINGS_FILE = os.path.join(RUNTIME_DIR, "z13ctl-plus/tablet-settings.json")
 
 
 def find_touchscreen():
@@ -35,6 +40,29 @@ def find_touchscreen():
             if evdev.ecodes.ABS_MT_SLOT in abs_codes:
                 return dev
     return None
+
+
+def touch_scroll_settings():
+    try:
+        with open(POSTURE_FILE) as posture:
+            if posture.read().strip() == "desktop":
+                return None
+    except OSError:
+        return None
+    sensitivity = 3
+    speed = 2
+    try:
+        with open(SETTINGS_FILE) as stream:
+            settings = json.load(stream)
+        sensitivity = settings.get("scroll_sensitivity", sensitivity)
+        speed = settings.get("scroll_speed", speed)
+    except (AttributeError, OSError, ValueError):
+        pass
+    if not isinstance(sensitivity, int) or not 1 <= sensitivity <= 5:
+        sensitivity = 3
+    if not isinstance(speed, int) or not 1 <= speed <= 5:
+        speed = 2
+    return SENSITIVITY_STEPS[sensitivity], speed
 
 
 def main():
@@ -61,6 +89,9 @@ def main():
     current_slot = 0
     ref_y = None          # avg-Y when swipe started
     last_trigger = 0      # last triggered delta position
+    gesture_enabled = False
+    step = SENSITIVITY_STEPS[3]
+    notches_per_step = 2
 
     for event in dev.read_loop():
         if event.type == evdev.ecodes.EV_ABS:
@@ -70,6 +101,11 @@ def main():
                 if event.value == -1:
                     pos_y.pop(current_slot, None)
                 else:
+                    if not pos_y:
+                        settings = touch_scroll_settings()
+                        gesture_enabled = settings is not None
+                        if settings:
+                            step, notches_per_step = settings
                     pos_y[current_slot] = None
             elif event.code == evdev.ecodes.ABS_MT_POSITION_Y:
                 if current_slot in pos_y:
@@ -79,7 +115,7 @@ def main():
               and event.code == evdev.ecodes.SYN_REPORT):
             active = {k: v for k, v in pos_y.items() if v is not None}
 
-            if len(active) >= MIN_FINGERS:
+            if gesture_enabled and len(active) >= MIN_FINGERS:
                 avg = sum(active.values()) / len(active)
                 if ref_y is None:
                     ref_y = avg
@@ -87,17 +123,16 @@ def main():
 
                 delta = avg - ref_y  # positive = fingers moved down
 
-                # Trigger wheel events per STEP pixels of movement
-                while delta - last_trigger > STEP:
+                while delta - last_trigger > step:
                     ui.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_WHEEL,
-                             -NOTCHES_PER_STEP)  # scroll down
+                             -notches_per_step)  # scroll down
                     ui.syn()
-                    last_trigger += STEP
-                while last_trigger - delta > STEP:
+                    last_trigger += step
+                while last_trigger - delta > step:
                     ui.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_WHEEL,
-                             NOTCHES_PER_STEP)  # scroll up
+                             notches_per_step)  # scroll up
                     ui.syn()
-                    last_trigger -= STEP
+                    last_trigger -= step
             else:
                 ref_y = None
 

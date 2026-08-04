@@ -12,7 +12,11 @@ if [ ! -x "$Z13CTL_PLUS" ]; then Z13CTL_PLUS=$(command -v z13ctl-plus 2>/dev/nul
 
 case "${1-}" in
 	desktop|laptop|tablet) state=$1 ;;
-	*) echo "usage: dock {desktop|laptop|tablet}" >&2; exit 2 ;;
+	*) echo "usage: dock {desktop|laptop|tablet} [disable-touch-in-desktop]" >&2; exit 2 ;;
+esac
+case "${2-true}" in
+	true|false) disable_touch_in_desktop=${2-true} ;;
+	*) echo "dock: disable-touch-in-desktop must be true or false" >&2; exit 2 ;;
 esac
 
 mkdir -p "$RUNDIR"
@@ -36,7 +40,8 @@ for p in $(qdbus6 "$DEST" 2>/dev/null | grep -E 'InputDevice/event'); do
 done
 
 # Enforce the profile idempotently.
-want=$([ "$state" = desktop ] && echo false || echo true)   # touch off only when docked
+want=true
+if [ "$state" = desktop ] && [ "$disable_touch_in_desktop" = true ]; then want=false; fi
 if [ -z "$path" ]; then
 	echo "dock: touchscreen unavailable" >&2
 	exit 1

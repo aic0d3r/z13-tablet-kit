@@ -6,6 +6,8 @@ drives the virtual switch and asks dock to apply display/touch side effects
 when posture changes and periodically for restart recovery.
 """
 import glob
+import json
+import os
 import signal
 import subprocess
 import time
@@ -14,9 +16,15 @@ from evdev import UInput, ecodes
 
 DOCK = (0x0B05, 0x1AC1)   # ASUS dock hub  -> external monitor = desktop
 FOLIO = (0x0B05, 0x1A30)  # Z13 keyboard folio = laptop
+TOUCHPAD_NAME = "ASUSTeK Computer Inc. GZ302EA-Keyboard Touchpad"
 SW = ecodes.SW_TABLET_MODE
 POLL = 2
 APPLY_INTERVAL = 30
+RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+SETTINGS_FILE = Path(RUNTIME_DIR) / "z13ctl-plus/tablet-settings.json"
+Z13CTL_PLUS = Path.home() / ".local/bin/z13ctl-plus"
+if not Z13CTL_PLUS.exists():
+    Z13CTL_PLUS = "z13ctl-plus"
 
 
 def usb(vid, pid):
@@ -45,12 +53,112 @@ def ext_display_present():
     return False
 
 
-def posture():
+def detected_posture():
+    folio_present = usb(*FOLIO)
     if usb(*DOCK) or ext_display_present():
-        return "desktop"
-    if usb(*FOLIO):
-        return "laptop"
-    return "tablet"
+        return "desktop", folio_present
+    if folio_present:
+        return "laptop", True
+    return "tablet", False
+
+
+def tablet_settings():
+    settings = {
+        "disable_touchscreen_in_desktop": True,
+        "touchpad_enabled": False,
+        "scroll_sensitivity": 3,
+        "scroll_speed": 2,
+    }
+    try:
+        with SETTINGS_FILE.open() as stream:
+            loaded = json.load(stream)
+        if isinstance(loaded, dict):
+            settings.update(loaded)
+    except (OSError, ValueError):
+        pass
+    sensitivity = settings["scroll_sensitivity"]
+    speed = settings["scroll_speed"]
+    if not isinstance(sensitivity, int) or not 1 <= sensitivity <= 5:
+        sensitivity = 3
+    if not isinstance(speed, int) or not 1 <= speed <= 5:
+        speed = 2
+    return (
+        settings["disable_touchscreen_in_desktop"] is not False,
+        settings["touchpad_enabled"] is True,
+        sensitivity,
+        speed,
+    )
+
+
+def apply_touchpad(enabled, folio_present):
+    if not folio_present:
+        return True, False, ""
+    for device in glob.glob("/sys/class/input/event*/device"):
+        try:
+            if Path(device, "name").read_text().strip() != TOUCHPAD_NAME:
+                continue
+            wanted = "0" if enabled else "1"
+            inhibited = Path(device, "inhibited")
+            if inhibited.read_text().strip() != wanted:
+                inhibited.write_text(wanted)
+            return True, enabled, ""
+        except OSError as error:
+            return False, False, f"touchpad update failed: {error}"
+    return False, False, "touchpad input unavailable"
+
+
+def report_integration(state, folio_present, healthy, error,
+                       touchscreen_enabled, touch_scroll_enabled,
+                       touchpad_enabled):
+    def boolean(value):
+        return str(value).lower()
+
+    result = subprocess.run([
+        Z13CTL_PLUS, "tablet", "report",
+        f"--posture={state}",
+        f"--folio-present={boolean(folio_present)}",
+        f"--healthy={boolean(healthy)}",
+        f"--error={error}",
+        f"--last-seen={int(time.time())}",
+        f"--touchscreen-enabled={boolean(touchscreen_enabled)}",
+        f"--touch-scroll-enabled={boolean(touch_scroll_enabled)}",
+        f"--touchpad-enabled={boolean(touchpad_enabled)}",
+    ], capture_output=True, text=True)
+    if result.returncode != 0:
+        print(result.stderr.strip() or "tablet integration report failed", flush=True)
+        return False
+    return True
+
+
+def apply_posture(state, folio_present, settings):
+    disable_touch_in_desktop, touchpad_setting, _, _ = settings
+    touchscreen_enabled = not (
+        state == "desktop" and disable_touch_in_desktop)
+    touch_scroll_enabled = state != "desktop"
+    result = subprocess.run([
+        Path.home() / ".local/bin/dock", state,
+        str(disable_touch_in_desktop).lower(),
+    ], capture_output=True, text=True)
+    if result.stdout:
+        print(result.stdout.strip(), flush=True)
+    if result.returncode != 0:
+        error = result.stderr.strip() or "posture application failed"
+        print(error, flush=True)
+        report_integration(
+            state, folio_present, False, error, touchscreen_enabled,
+            touch_scroll_enabled, False)
+        return False
+    touchpad_ok, touchpad_enabled, error = apply_touchpad(
+        touchpad_setting, folio_present)
+    if not touchpad_ok:
+        print(error, flush=True)
+        report_integration(
+            state, folio_present, False, error, touchscreen_enabled,
+            touch_scroll_enabled, touchpad_enabled)
+        return False
+    return report_integration(
+        state, folio_present, True, "", touchscreen_enabled,
+        touch_scroll_enabled, touchpad_enabled)
 
 
 def main():
@@ -65,13 +173,20 @@ def main():
     signal.signal(signal.SIGINT, stop)
     switch_state = None
     applied_posture = None
+    applied_folio = None
+    applied_settings = None
     last_apply = 0.0
     while not stopping:
-        state = posture()
+        state, folio_present = detected_posture()
+        settings = tablet_settings()
         now = time.monotonic()
-        if state != applied_posture or now - last_apply >= APPLY_INTERVAL:
-            if subprocess.call([Path.home() / ".local/bin/dock", state]) == 0:
+        if (state != applied_posture or folio_present != applied_folio
+                or settings != applied_settings
+                or now - last_apply >= APPLY_INTERVAL):
+            if apply_posture(state, folio_present, settings):
                 applied_posture = state
+                applied_folio = folio_present
+                applied_settings = settings
                 last_apply = now
         if state == applied_posture:
             want = int(state == "tablet")

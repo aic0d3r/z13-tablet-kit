@@ -20,6 +20,9 @@ else
 fi
 if [ -n "$Z13CTL_PLUS" ]; then
 	"$Z13CTL_PLUS" display rotation none || echo "WARNING: z13ctl-plus unavailable; rotation state left unchanged"
+	"$Z13CTL_PLUS" tablet report --posture=laptop --folio-present=false \
+		--healthy=true --error= --last-seen=0 --touchscreen-enabled=true \
+		--touch-scroll-enabled=false --touchpad-enabled=false >/dev/null 2>&1 || true
 else
 	echo "WARNING: z13ctl-plus unavailable; display state left unchanged"
 fi

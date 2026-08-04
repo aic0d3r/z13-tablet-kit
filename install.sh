@@ -23,6 +23,7 @@ if [ ! -x "$Z13CTL_PLUS" ]; then Z13CTL_PLUS=$(command -v z13ctl-plus 2>/dev/nul
 [ -n "$Z13CTL_PLUS" ] || { echo "ERROR: z13ctl-plus required"; exit 1; }
 "$Z13CTL_PLUS" display --help >/dev/null || { echo "ERROR: z13ctl-plus display coordinator required"; exit 1; }
 systemctl --user cat z13ctl-plus.socket >/dev/null 2>&1 || { echo "ERROR: z13ctl-plus.socket required"; exit 1; }
+id -nG | grep -qw users || echo "NOTE: log out and back in after 'sudo usermod -aG users $USER' to enable touchpad control"
 pacman -Q python-evdev >/dev/null 2>&1 || { echo "ERROR: python-evdev required  ->  sudo pacman -S python-evdev"; exit 1; }
 pacman -Q maliit-keyboard >/dev/null 2>&1 || echo "NOTE: on-screen keyboard not installed  ->  paru -S maliit-keyboard"
 pacman -Q iio-sensor-proxy >/dev/null 2>&1 || echo "NOTE: iio-sensor-proxy not installed (Plasma auto-rotate needs it)  ->  sudo pacman -S iio-sensor-proxy"
