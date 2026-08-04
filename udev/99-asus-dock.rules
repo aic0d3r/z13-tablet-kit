@@ -1,5 +1,0 @@
-# Z13 posture manager triggers. drm hotplug (docking/external monitor) + ASUS USB
-# add/remove (dock hub 0b05:1ac1 / keyboard folio 0b05:1a30). The script re-checks
-# actual presence and derives desktop/laptop/tablet, so extra events are harmless.
-SUBSYSTEM=="drm", ACTION=="change", RUN+="/usr/bin/systemctl --user --machine=ezflow@.host --no-block start asus-dock.service"
-SUBSYSTEM=="usb", ACTION=="add|remove", ENV{ID_VENDOR_ID}=="0b05", RUN+="/usr/bin/systemctl --user --machine=ezflow@.host --no-block start asus-dock.service"

@@ -4,7 +4,7 @@ Posture-aware tablet stack for the **ASUS ROG Flow Z13 (GZ302, AMD Strix Halo)**
 **KDE Plasma 6 / Wayland** (Arch / CachyOS). Turns the Z13 into a proper 3-mode device:
 it detects whether you're **docked**, using the **keyboard folio (laptop)**, or holding it
 as a **tablet**, and adapts the touchscreen, display, and auto-rotate accordingly — with no
-kernel hacks and only three udev rules needing root.
+kernel hacks and only two udev rules needing root.
 
 ## Posture model
 
@@ -18,28 +18,26 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
 
 ## Components
 
-- `asus-dock` (user) — computes posture from the dock hub / folio USB devices; toggles the
-  internal touchscreen (ELAN9008) via KWin D-Bus `enabled`. A non-eDP external display also
-  counts as `desktop`, so any USB-C dock or HDMI cable works. Triggered by a udev rule
-  (DRM hotplug + ASUS USB add/remove) that bridges into the session, plus a 30s safety timer
-  (the folio-detach USB event is unreliable on this device). Every run publishes the posture
-  to `z13ctl`; failed publications return an error and are retried rather than falling back
-  to direct display writes.
+- `dock` (user) — applies posture changes supplied by `z13-tablet-switch`: it toggles the
+  internal touchscreen (ELAN9008) through KWin D-Bus and publishes posture to `z13ctl-plus`.
+  Failed applications are retried, and posture is republished every 30 seconds to recover
+  cleanly from KWin or controller restarts.
 - **Auto-rotate** — Plasma-native, gated on the virtual `SW_TABLET_MODE` switch below.
   `iio-sensor-proxy` (default on CachyOS) reads the accel; enable once via Quick Settings →
-  Auto-rotate → right-click → "Rotate only in tablet mode". No kit daemon needed.
-- `z13ctl` display coordinator — owns all KScreen changes. Desktop and laptop use scale `1.5`,
-  tablet posture uses scale `2.0`; this kit never invokes `kscreen-doctor` directly. Dock
-  posture waits ten seconds for DRM topology to settle. External outputs remain entirely
-  KDE-owned, and a disabled internal panel is never reconfigured.
-- `z13-tablet-switch` (user) — creates a virtual `SW_TABLET_MODE` uinput switch flipped on
-  only in tablet posture. The GZ302's WMI path advertises the switch but never emits it, so
-  without this daemon Plasma's "rotate only in tablet mode" checkbox has nothing to gate on
-  and the screen won't auto-rotate in tablet posture. Runs as a **user service** (logind
-  grants `/dev/uinput` to the active session, same mechanism as `z13-touch-scroll`). This is
-  the daemon's *only* job — the on-screen keyboard is a separate Plasma setting that pops on
-  touch with no tablet-mode signal needed. (Plasma 6.7 intentionally dropped the old "force
-  bigger UI in tablet mode" behavior, [bugs.kde.org #521550](https://bugs.kde.org/show_bug.cgi?id=521550).)
+  Auto-rotate → right-click → "Rotate only in tablet mode". No separate rotation daemon is needed.
+- `z13ctl-plus` display coordinator — owns scale and refresh changes. Desktop and laptop use
+  scale `1.5`; tablet posture uses scale `2.0`. Plasma retains tablet rotation unless an
+  explicit rotation intent is sent. This kit never invokes `kscreen-doctor` directly. Dock
+  posture waits ten seconds for DRM topology to settle, and external outputs remain KDE-owned.
+- `z13-tablet-switch` (user) — polls the dock hub, folio, and DRM connectors every two seconds,
+  then calls `dock` when posture changes. A non-eDP external display counts as `desktop`,
+  so any USB-C dock or HDMI cable works. It also creates a virtual `SW_TABLET_MODE` uinput
+  switch flipped on only in tablet posture. The GZ302's WMI path advertises the switch but
+  never emits it, so Plasma otherwise has nothing to gate "rotate only in tablet mode" on.
+  Runs as a **user service**; logind grants `/dev/uinput` to the active session. The on-screen
+  keyboard remains a separate Plasma setting that needs no tablet-mode signal. (Plasma 6.7
+  intentionally dropped the old "force bigger UI in tablet mode" behavior,
+  [bugs.kde.org #521550](https://bugs.kde.org/show_bug.cgi?id=521550).)
 - `z13-touch-scroll` (user) — reads the ELAN9008 touchscreen and detects 2-finger vertical
   swipes, injecting mouse wheel events via evdev UInput. Works in **any** app: terminal
   scrollback, opencode TUI, browsers, document viewers. Single-finger touch is left to the
@@ -50,11 +48,9 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
 
 ## Requirements
 
-- KDE Plasma 6 / Wayland, systemd, Arch or CachyOS.
+- KDE Plasma 6 / Wayland, systemd, Arch or CachyOS (`kscreen-doctor`, `qdbus6`, and `gdbus`).
 - `iio-sensor-proxy` (default on CachyOS) — for Plasma auto-rotate.
-- `z13ctl` with the display coordinator commands available.
-- `keyd`; installation preserves `/etc/keyd/default.conf` once, then marks the Z13 keyboard
-  IDs as keyboard interfaces. Uninstall restores that exact backup and reloads keyd.
+- `z13ctl-plus` with its user socket and display coordinator commands available.
 - `python-evdev` (official repo) — for the uinput switch and touch scroll.
 - `maliit-keyboard` (AUR) — for the OSK.
 - `/dev/uinput` write access for `z13-tablet-switch` and `z13-touch-scroll` is auto-granted
@@ -67,17 +63,17 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
 sudo pacman -S python-evdev
 paru -S maliit-keyboard
 cd ~/z13-tablet-kit
-./install.sh        # idempotent; uses sudo only for udev rules
+./install.sh        # idempotent; uses sudo for system cleanup and udev rules
 ./uninstall.sh      # removes everything (leaves maliit-keyboard installed)
 # Then enable auto-rotate once: Quick Settings → Auto-rotate → right-click →
 # "Rotate only in tablet mode". The kit's virtual SW_TABLET_MODE gates it.
 ```
 
 Uninstall requests laptop defaults (scale 1.5, normal rotation, touchscreen on,
-tablet mode off), uninhibits the folio touchpad, and restores the exact keyd
-configuration backed up by the installer.
+tablet mode off) and uninhibits the folio touchpad.
 
-Logs/state: `tail ~/asus-dock.log`, `cat "$XDG_RUNTIME_DIR/z13-tablet-kit/posture"`.
+Logs/state: `journalctl --user -u z13-tablet-switch`,
+`cat "$XDG_RUNTIME_DIR/z13-tablet-kit/posture"`.
 
 ## Notes / optional tweaks
 
@@ -92,19 +88,7 @@ Logs/state: `tail ~/asus-dock.log`, `cat "$XDG_RUNTIME_DIR/z13-tablet-kit/postur
 - **Auto-rotate:** driven by Plasma + `iio-sensor-proxy`, gated by the virtual tablet-mode
   switch. If a portrait direction comes out mirrored on another unit, that's a sensor-mount
   quirk to fix in `iio-sensor-proxy`, not this kit.
-- **Tablet gestures (recommended Plasma defaults, applied to `~/.config/kwinrc`):**
-  - Overview effect enabled (`[Plugins] overviewEnabled=true`). Enables the touchpad
-    3-finger defaults too: swipe up → Overview, left/right → switch virtual desktop.
-  - Touchscreen **top-edge swipe → Overview** (`[Effect-overview] TouchBorderActivate=0`;
-    `0` = `ElectricTop`). Swipe down from the top edge to open the window/app grid.
-  - These are not deployed by `install.sh` (they're personal Plasma settings). To apply:
-    `kwriteconfig6 --file kwinrc --group Plugins --key overviewEnabled true` and
-    `kwriteconfig6 --file kwinrc --group Effect-overview --key TouchBorderActivate 0`,
-    then `qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.loadEffect overview`
-    (hot-load; it auto-loads on later boots). Other edges can be bound in
-    System Settings → Workspace → Touchscreen Gestures (`kcmshell6 kwintouchscreen`).
-  - Verified: this install uses **Plasma's native tiling** (Meta+T), not Polonium/other
-    scripts. Overview was previously disabled; re-enabling it does not conflict with tiling.
+- Configure optional edge gestures in **System Settings → Workspace → Touchscreen Gestures**.
 
 ## Credits
 

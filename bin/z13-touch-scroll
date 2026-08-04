@@ -89,15 +89,13 @@ def main():
 
                 # Trigger wheel events per STEP pixels of movement
                 while delta - last_trigger > STEP:
-                    for _ in range(NOTCHES_PER_STEP):
-                        ui.write(evdev.ecodes.EV_REL,
-                                 evdev.ecodes.REL_WHEEL, -1)  # scroll down
+                    ui.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_WHEEL,
+                             -NOTCHES_PER_STEP)  # scroll down
                     ui.syn()
                     last_trigger += STEP
                 while last_trigger - delta > STEP:
-                    for _ in range(NOTCHES_PER_STEP):
-                        ui.write(evdev.ecodes.EV_REL,
-                                 evdev.ecodes.REL_WHEEL, 1)   # scroll up
+                    ui.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_WHEEL,
+                             NOTCHES_PER_STEP)  # scroll up
                     ui.syn()
                     last_trigger -= STEP
             else:

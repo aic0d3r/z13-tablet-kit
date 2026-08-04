@@ -1,0 +1,69 @@
+#!/bin/bash
+# Apply a desktop / laptop / tablet posture supplied by z13-tablet-switch.
+# Touch is off only in desktop; on in laptop/tablet.
+# Display policy is applied by the z13ctl-plus daemon.
+set -u
+DEST=org.kde.KWin; IF=org.kde.KWin.InputDevice
+RUNDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/z13-tablet-kit"
+STATEF="$RUNDIR/posture"
+NAME="ELAN9008:00 04F3:43C7"
+Z13CTL_PLUS="$HOME/.local/bin/z13ctl-plus"
+if [ ! -x "$Z13CTL_PLUS" ]; then Z13CTL_PLUS=$(command -v z13ctl-plus 2>/dev/null || true); fi
+
+case "${1-}" in
+	desktop|laptop|tablet) state=$1 ;;
+	*) echo "usage: dock {desktop|laptop|tablet}" >&2; exit 2 ;;
+esac
+
+mkdir -p "$RUNDIR"
+chmod 700 "$RUNDIR"
+
+# z13-tablet-switch retries this command until publication succeeds.
+publish_ok=true
+if [ -z "$Z13CTL_PLUS" ] || ! "$Z13CTL_PLUS" display posture "$state"; then
+	publish_ok=false
+fi
+
+# Resolve the touchscreen KWin object path.
+path=""
+for p in $(qdbus6 "$DEST" 2>/dev/null | grep -E 'InputDevice/event'); do
+	nm=$(gdbus call --session --dest "$DEST" --object-path "$p" \
+		--method org.freedesktop.DBus.Properties.Get "$IF" name 2>/dev/null)
+	if echo "$nm" | grep -q "$NAME" && ! echo "$nm" | grep -qi stylus; then
+		path=$p
+		break
+	fi
+done
+
+# Enforce the profile idempotently.
+want=$([ "$state" = desktop ] && echo false || echo true)   # touch off only when docked
+if [ -z "$path" ]; then
+	echo "dock: touchscreen unavailable" >&2
+	exit 1
+fi
+if ! cur=$(gdbus call --session --dest "$DEST" --object-path "$path" \
+	--method org.freedesktop.DBus.Properties.Get "$IF" enabled 2>/dev/null); then
+	echo "dock: touchscreen state unavailable" >&2
+	exit 1
+fi
+if { [ "$want" = false ] && [[ "$cur" == *true* ]]; } || { [ "$want" = true ] && [[ "$cur" == *false* ]]; }; then
+	if ! gdbus call --session --dest "$DEST" --object-path "$path" \
+		--method org.freedesktop.DBus.Properties.Set "$IF" enabled "<$want>" >/dev/null 2>&1; then
+		echo "dock: touchscreen update failed" >&2
+		exit 1
+	fi
+fi
+
+# Publish state only after z13ctl-plus and KWin accept it.
+if [ "$publish_ok" = true ]; then
+	tmp="$STATEF.tmp.$$"
+	if ! printf '%s\n' "$state" > "$tmp" || ! mv -f "$tmp" "$STATEF"; then
+		rm -f "$tmp"
+		echo "dock: $state pending (posture state write failed, touch=$want)" >&2
+		exit 1
+	fi
+	echo "dock: $state (touch=$want)"
+else
+	echo "dock: $state pending (z13ctl-plus unavailable, touch=$want)" >&2
+	exit 1
+fi

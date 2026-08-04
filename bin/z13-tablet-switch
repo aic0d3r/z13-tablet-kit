@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
-"""z13-tablet-switch — virtual SW_TABLET_MODE switch driven by Z13 posture.
+"""Poll Z13 posture, apply it, and expose a virtual SW_TABLET_MODE switch.
 
-Plasma's tablet mode (bigger panel/buttons, auto OSK, maximized apps) is gated on
-a hardware SW_TABLET_MODE switch the GZ302 never emits (the WMI device advertises
-the capability but fires nothing). This creates a virtual uinput switch and flips
-it ON only in tablet posture (undocked AND no keyboard folio), so Plasma engages
-its real tablet mode. Runs as root (needs /dev/uinput).
+The GZ302 advertises SW_TABLET_MODE over WMI but never emits it. This user daemon
+drives the virtual switch and asks dock to apply display/touch side effects
+when posture changes and periodically for restart recovery.
 """
 import glob
 import signal
+import subprocess
 import time
+from pathlib import Path
 from evdev import UInput, ecodes
 
 DOCK = (0x0B05, 0x1AC1)   # ASUS dock hub  -> external monitor = desktop
 FOLIO = (0x0B05, 0x1A30)  # Z13 keyboard folio = laptop
 SW = ecodes.SW_TABLET_MODE
 POLL = 2
+APPLY_INTERVAL = 30
 
 
 def usb(vid, pid):
@@ -44,8 +45,12 @@ def ext_display_present():
     return False
 
 
-def tablet_posture():
-    return not (usb(*DOCK) or ext_display_present()) and not usb(*FOLIO)
+def posture():
+    if usb(*DOCK) or ext_display_present():
+        return "desktop"
+    if usb(*FOLIO):
+        return "laptop"
+    return "tablet"
 
 
 def main():
@@ -58,13 +63,22 @@ def main():
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
-    cur = None
+    switch_state = None
+    applied_posture = None
+    last_apply = 0.0
     while not stopping:
-        want = 1 if tablet_posture() else 0
-        if want != cur:
-            ui.write(ecodes.EV_SW, SW, want)
-            ui.syn()
-            cur = want
+        state = posture()
+        now = time.monotonic()
+        if state != applied_posture or now - last_apply >= APPLY_INTERVAL:
+            if subprocess.call([Path.home() / ".local/bin/dock", state]) == 0:
+                applied_posture = state
+                last_apply = now
+        if state == applied_posture:
+            want = int(state == "tablet")
+            if want != switch_state:
+                ui.write(ecodes.EV_SW, SW, want)
+                ui.syn()
+                switch_state = want
         time.sleep(POLL)
     ui.write(ecodes.EV_SW, SW, 0)
     ui.syn()

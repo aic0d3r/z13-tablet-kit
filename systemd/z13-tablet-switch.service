@@ -1,6 +1,7 @@
 [Unit]
-Description=z13 tablet-mode virtual switch (SW_TABLET_MODE → posture-gated auto-rotate)
-After=graphical-session.target
+Description=Z13 posture manager and virtual tablet-mode switch
+Wants=z13ctl-plus.socket
+After=graphical-session.target z13ctl-plus.socket
 
 [Service]
 ExecStart=%h/.local/bin/z13-tablet-switch
