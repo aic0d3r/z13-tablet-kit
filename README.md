@@ -127,6 +127,10 @@ paru -S z13ctl-plus-bin
 # sudo z13ctl-plus setup
 ```
 
+The AUR package (`z13ctl-plus-bin`) trails the GitHub releases (currently 1.3.1 vs.
+**v2.1.0** — AUR updates are paused) and lacks the tablet integration. Prefer the
+**release tarball** from GitHub above.
+
 Then enable its user daemon (after stopping any other Z13 hardware daemon):
 
 ```bash
