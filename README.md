@@ -6,6 +6,34 @@ it detects whether you're **docked**, using the **keyboard folio (laptop)**, or 
 as a **tablet**, and adapts the touchscreen, display, and auto-rotate accordingly — with no
 kernel hacks and only two udev rules needing root.
 
+## Stack
+
+This kit is one of three cooperating repos. Install all three on the same machine:
+
+| Repo | Role |
+|---|---|
+| [z13-tablet-kit](https://github.com/aic0d3r/z13-tablet-kit) | posture detection and touch input — **this repo** |
+| [z13ctl-plus](https://github.com/aic0d3r/z13ctl-plus) | daemon that owns display state and persists tablet settings |
+| [z13gui-plus](https://github.com/aic0d3r/z13gui-plus) | optional GTK4 overlay drawer: live posture/health chip and tablet toggles |
+
+How they work together:
+
+1. `z13-tablet-switch` detects dock/folio/tablet posture and applies it through
+   `dock` (touchscreen toggle, virtual tablet-mode switch).
+2. `dock` publishes posture to the `z13ctl-plus` daemon, which serializes scale
+   and rotation changes via `kscreen-doctor` (tablet uses scale 1.75).
+3. `z13gui-plus` shows the live posture/health chip and exposes the tablet
+   toggles: desktop touch policy, two-finger context menus, folio touchpad
+   opt-in, scroll speed.
+4. `z13ctl-plus` persists those settings and projects them to
+   `$XDG_RUNTIME_DIR/z13ctl-plus/tablet-settings.json`; `z13-tablet-switch` and
+   `z13-touch-scroll` read the projection and apply changes live, without
+   restarts.
+
+Ownership is one-directional: only the kit writes the posture file, only
+`z13ctl-plus` writes tablet settings, and the GUI is a read/write client of the
+daemon — no repo reaches into another's state directly.
+
 ## Posture model
 
 | Posture | Detected by | Touch | Tablet mode | Auto-rotate |
@@ -25,7 +53,7 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
 - **Auto-rotate** — Plasma-native, gated on the virtual `SW_TABLET_MODE` switch below.
   `iio-sensor-proxy` (default on CachyOS) reads the accel; enable once via Quick Settings →
   Auto-rotate → right-click → "Rotate only in tablet mode". No separate rotation daemon is needed.
-- `z13ctl-plus` display coordinator — owns scale and refresh changes. Desktop and laptop use
+- [`z13ctl-plus`](https://github.com/aic0d3r/z13ctl-plus) display coordinator — owns scale and refresh changes. Desktop and laptop use
   scale `1.5`; tablet posture uses scale `1.75`. Plasma retains tablet rotation unless an
   explicit rotation intent is sent. This kit never invokes `kscreen-doctor` directly. Dock
   posture waits ten seconds for DRM topology to settle, and external outputs remain KDE-owned.
@@ -38,7 +66,7 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
   keyboard remains a separate Plasma setting that needs no tablet-mode signal. (Plasma 6.7
   intentionally dropped the old "force bigger UI in tablet mode" behavior,
   [bugs.kde.org #521550](https://bugs.kde.org/show_bug.cgi?id=521550).)
-- `z13gui-plus` (optional) — shows live posture and health when the kit is active and exposes
+- [`z13gui-plus`](https://github.com/aic0d3r/z13gui-plus) (optional) — shows live posture and health when the kit is active and exposes
   desktop touch policy, two-finger context menus, guarded folio-touchpad opt-in, and 1–5
   touch-scroll controls. Settings are persisted by `z13ctl-plus` and apply without restarts.
 - `z13-touch-scroll` (user) — reads the ELAN9008 touchscreen and detects 2-finger vertical
