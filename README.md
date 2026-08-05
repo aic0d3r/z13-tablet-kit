@@ -120,11 +120,11 @@ tablet-mode switch and touch scroll. `plasma-keyboard` ships with Plasma 6.7
 # AUR package
 paru -S z13ctl-plus-bin
 
-# …or from a release tarball:
-# wget https://github.com/aic0d3r/z13ctl-plus/releases/latest
-# tar xzf z13ctl-plus_*_linux_amd64.tar.gz
-# sudo install -Dm755 z13ctl-plus /usr/local/bin/z13ctl-plus
-# sudo z13ctl-plus setup
+# …or from the release tarball:
+wget https://github.com/aic0d3r/z13ctl-plus/releases/download/v2.1.0/z13ctl-plus_2.1.0_linux_amd64.tar.gz
+tar xzf z13ctl-plus_2.1.0_linux_amd64.tar.gz
+sudo install -Dm755 z13ctl-plus /usr/local/bin/z13ctl-plus
+sudo z13ctl-plus setup
 ```
 
 The AUR package (`z13ctl-plus-bin`) trails the GitHub releases (currently 1.3.1 vs.
