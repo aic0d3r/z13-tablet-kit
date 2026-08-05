@@ -73,6 +73,19 @@ else
 	exit 1
 fi
 
+# Gate the on-screen keyboard on posture. KWin's "TouchOnly" mode pops the OSK
+# on any touch device regardless of physical keyboards, so it appears even with
+# the folio or an external keyboard attached. Force it Off whenever a real
+# keyboard is present; restore TouchOnly only in tablet posture.
+case "$state" in
+	tablet) osk_mode=1 ;;  # TouchOnly
+	*)      osk_mode=0 ;;  # Off
+esac
+dbus-send --session --dest=org.kde.KWin --type=method_call /VirtualKeyboard \
+	org.freedesktop.DBus.Properties.Set \
+	string:org.kde.kwin.VirtualKeyboard string:mode \
+	variant:int32:"$osk_mode" >/dev/null 2>&1
+
 # The on-screen keyboard (plasma-keyboard / maliit-keyboard) caches the output
 # geometry and scale at startup. A posture switch changes the active panel and
 # its scale, so the keyboard keeps rendering against a stale "placeholder

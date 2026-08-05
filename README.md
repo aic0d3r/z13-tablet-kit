@@ -76,9 +76,11 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
   providing a context menu where KDE Wayland has no touch right-click.
 - **On-screen keyboard** — `plasma-keyboard` (ships with Plasma 6.7, recommended)
   or `maliit-keyboard` (AUR, legacy alternative); auto-pops on touch-focus. The kit
-  restarts whichever keyboard is active on every posture change, because it caches
-  output geometry and would otherwise render against a stale screen and clip keys
-  after the panel/scale switch.
+  gates it on posture — `TouchOnly` in tablet mode, forced `Off` whenever the folio
+  or an external keyboard is attached (KWin would otherwise pop the OSK on any touch
+  device). It also restarts the active keyboard on every posture change, because it
+  caches output geometry and would otherwise render against a stale screen and clip
+  keys after the panel/scale switch.
 - **Folio touchpad** defaults to inhibited via udev because its firmware emits jumping-cursor
   events that libinput cannot filter. Members of `users` can explicitly opt in through
   `z13gui-plus`; every enable presents a warning.
@@ -131,3 +133,15 @@ Logs/state: `journalctl --user -u z13-tablet-switch`,
   switch. If a portrait direction comes out mirrored on another unit, that's a sensor-mount
   quirk to fix in `iio-sensor-proxy`, not this kit.
 - Configure optional edge gestures in **System Settings → Workspace → Touchscreen Gestures**.
+
+## Troubleshooting
+
+- **Touchscreen dead at the SDDM login screen.** The kit's udev rule grants the
+  touchscreen to your *logged-in* session, not to the pre-login greeter. If you want
+  touch at the greeter too, add the display-manager user to the `input` group:
+  `sudo usermod -aG input sddm`.
+- **On-screen keyboard pops up with the folio attached.** It shouldn't — the kit forces
+  the OSK `Off` outside tablet posture. If it still appears, run
+  `~/.local/bin/dock laptop` (or the current posture) once to re-apply, or check
+  `qdbus6 org.kde.KWin /VirtualKeyboard org.kde.kwin.VirtualKeyboard.mode` (should read
+  `0` when a physical keyboard is attached).
