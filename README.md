@@ -133,21 +133,3 @@ Logs/state: `journalctl --user -u z13-tablet-switch`,
   switch. If a portrait direction comes out mirrored on another unit, that's a sensor-mount
   quirk to fix in `iio-sensor-proxy`, not this kit.
 - Configure optional edge gestures in **System Settings → Workspace → Touchscreen Gestures**.
-
-## Troubleshooting
-
-- **Touchscreen dead at the SDDM login screen.** This is a system-level SDDM/logind
-  issue, **not** something the kit can fix — the kit runs only inside your logged-in
-  session. The Z13's SDDM runs a Wayland greeter whose `kwin_wayland` acquires devices
-  (DRM *and* input) via logind's `TakeDevice` API; on some setups logind does not grant
-  the greeter session the devices, so kwin starts degraded and the touchscreen is dead
-  even though the `sddm` user is in the `input`/`video` groups (kwin doesn't use group
-  perms at the greeter). Reliable workaround: switch the greeter to X11, where the
-  greeter's Xorg opens input directly via libinput and the `input` group membership
-  applies — drop in `/etc/sddm.conf.d/10-greeter-x11.conf` with `[General]` /
-  `DisplayServer=x11` and reboot. The post-login session stays Wayland.
-- **On-screen keyboard pops up with the folio attached.** It shouldn't — the kit forces
-  the OSK `Off` outside tablet posture. If it still appears, run
-  `~/.local/bin/dock laptop` (or the current posture) once to re-apply, or check
-  `qdbus6 org.kde.KWin /VirtualKeyboard org.kde.kwin.VirtualKeyboard.mode` (should read
-  `0` when a physical keyboard is attached).
