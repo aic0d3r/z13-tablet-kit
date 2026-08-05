@@ -74,7 +74,10 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
   scrollback, opencode TUI, browsers, and document viewers. It follows the desktop touch policy.
   An opt-in stationary two-finger hold moves the pointer to the touch point and right-clicks,
   providing a context menu where KDE Wayland has no touch right-click.
-- `maliit-keyboard` — on-screen keyboard (AUR), auto-pops on touch-focus.
+- `maliit-keyboard` — on-screen keyboard (AUR), auto-pops on touch-focus. The kit
+  restarts the active keyboard (`plasma-keyboard` or `maliit-keyboard`) on every
+  posture change, because it caches output geometry and would otherwise render
+  against a stale screen and clip keys after the panel/scale switch.
 - **Folio touchpad** defaults to inhibited via udev because its firmware emits jumping-cursor
   events that libinput cannot filter. Members of `users` can explicitly opt in through
   `z13gui-plus`; every enable presents a warning.

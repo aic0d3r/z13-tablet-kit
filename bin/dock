@@ -72,3 +72,13 @@ else
 	echo "dock: $state pending (z13ctl-plus unavailable, touch=$want)" >&2
 	exit 1
 fi
+
+# The on-screen keyboard (plasma-keyboard / maliit-keyboard) caches the output
+# geometry and scale at startup. A posture switch changes the active panel and
+# its scale, so the keyboard keeps rendering against a stale "placeholder
+# screen" and its keys get clipped at the edges. Restarting it lets KWin
+# relaunch it against the new output. The display reconfig is asynchronous, so
+# wait briefly first; run detached so this command never blocks posture apply.
+if pgrep -u "$(id -u)" -f 'plasma-keyboard|maliit-keyboard' >/dev/null 2>&1; then
+	(sleep 2; pkill -u "$(id -u)" -f 'plasma-keyboard|maliit-keyboard') >/dev/null 2>&1 &
+fi
