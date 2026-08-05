@@ -65,6 +65,7 @@ def detected_posture():
 def tablet_settings():
     settings = {
         "disable_touchscreen_in_desktop": True,
+        "two_finger_hold_context_menu": False,
         "touchpad_enabled": False,
         "scroll_sensitivity": 3,
         "scroll_speed": 2,
@@ -84,6 +85,7 @@ def tablet_settings():
         speed = 2
     return (
         settings["disable_touchscreen_in_desktop"] is not False,
+        settings["two_finger_hold_context_menu"] is True,
         settings["touchpad_enabled"] is True,
         sensitivity,
         speed,
@@ -131,10 +133,10 @@ def report_integration(state, folio_present, healthy, error,
 
 
 def apply_posture(state, folio_present, settings):
-    disable_touch_in_desktop, touchpad_setting, _, _ = settings
+    disable_touch_in_desktop, _, touchpad_setting, _, _ = settings
     touchscreen_enabled = not (
         state == "desktop" and disable_touch_in_desktop)
-    touch_scroll_enabled = state != "desktop"
+    touch_scroll_enabled = touchscreen_enabled
     result = subprocess.run([
         Path.home() / ".local/bin/dock", state,
         str(disable_touch_in_desktop).lower(),

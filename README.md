@@ -26,7 +26,7 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
   `iio-sensor-proxy` (default on CachyOS) reads the accel; enable once via Quick Settings →
   Auto-rotate → right-click → "Rotate only in tablet mode". No separate rotation daemon is needed.
 - `z13ctl-plus` display coordinator — owns scale and refresh changes. Desktop and laptop use
-  scale `1.5`; tablet posture uses scale `2.0`. Plasma retains tablet rotation unless an
+  scale `1.5`; tablet posture uses scale `1.75`. Plasma retains tablet rotation unless an
   explicit rotation intent is sent. This kit never invokes `kscreen-doctor` directly. Dock
   posture waits ten seconds for DRM topology to settle, and external outputs remain KDE-owned.
 - `z13-tablet-switch` (user) — polls the dock hub, folio, and DRM connectors every two seconds,
@@ -39,13 +39,13 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
   intentionally dropped the old "force bigger UI in tablet mode" behavior,
   [bugs.kde.org #521550](https://bugs.kde.org/show_bug.cgi?id=521550).)
 - `z13gui-plus` (optional) — shows live posture and health when the kit is active and exposes
-  desktop touch policy, guarded folio-touchpad opt-in, and 1–5 touch-scroll controls. Settings
-  are persisted by `z13ctl-plus` and apply without service restarts.
+  desktop touch policy, two-finger context menus, guarded folio-touchpad opt-in, and 1–5
+  touch-scroll controls. Settings are persisted by `z13ctl-plus` and apply without restarts.
 - `z13-touch-scroll` (user) — reads the ELAN9008 touchscreen and detects 2-finger vertical
   swipes, injecting mouse wheel events via evdev UInput. Works in **any** app: terminal
-  scrollback, opencode TUI, browsers, document viewers, and is disabled in desktop posture.
-  Single-finger touch is left to the app/terminal (Konsole scrolls natively; other terminals
-  treat it as text selection).
+  scrollback, opencode TUI, browsers, and document viewers. It follows the desktop touch policy.
+  An opt-in stationary two-finger hold moves the pointer to the touch point and right-clicks,
+  providing a context menu where KDE Wayland has no touch right-click.
 - `maliit-keyboard` — on-screen keyboard (AUR), auto-pops on touch-focus.
 - **Folio touchpad** defaults to inhibited via udev because its firmware emits jumping-cursor
   events that libinput cannot filter. Members of `users` can explicitly opt in through
@@ -86,6 +86,8 @@ Logs/state: `journalctl --user -u z13-tablet-switch`,
 - **Touch scrolling:** 2-finger vertical swipe scrolls any focused app (terminal,
   browser, opencode TUI). `z13gui-plus` exposes sensitivity and speed levels 1–5;
   defaults 3 and 2 preserve the original behavior.
+- **Touch context menus:** a stationary two-finger hold (~650 ms) moves the pointer to the
+  touch point and sends a real right-click; moving either finger cancels into scrolling.
 - **Page Up/Down without dedicated keys:** the Z13 folio keyboard has no Page Up/Down
   keycaps, but **Fn+Up / Fn+Down** are mapped at firmware level and work everywhere.
 - **3-finger gestures** are reserved by KWin (desktop overview / virtual desktop

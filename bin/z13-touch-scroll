@@ -1,27 +1,33 @@
 #!/usr/bin/env python3
 """
-z13-touch-scroll: 2-finger vertical swipe → mouse wheel scroll.
+z13-touch-scroll: touchscreen scrolling and context-menu gestures.
 
 Reads the ELAN9008 touchscreen and detects 2-finger vertical swipes,
-then injects mouse wheel events via evdev UInput. Wheel events work
-everywhere: terminal scrollback, opencode TUI, browsers, etc.
+then injects mouse wheel events via evdev UInput. An optional stationary
+two-finger hold (~650 ms) moves the pointer to the touch point and sends a
+right-click, giving a context menu where KDE Wayland has no touch right-click.
 
-No external dependencies beyond python-evdev. Touchscreen read access
-is granted by the udev uaccess rule (logind auto-sets ACL). /dev/uinput
-write access is auto-granted by logind for the active session.
-
-Tuning: edit STEP / NOTCHES_PER_STEP below.
+Sensitivity, speed, and context-menu behavior are controlled through z13ctl-plus.
 """
 
 import json
 import os
+import select
 import sys
+import time
 
 import evdev
 
 TOUCHSCREEN_NAME = "ELAN9008:00 04F3:43C7"
 MIN_FINGERS = 2
 SENSITIVITY_STEPS = {1: 180, 2: 135, 3: 90, 4: 60, 5: 30}
+HOLD_SECONDS = 0.65
+HOLD_MOVE = 25
+# Touchscreen ABS range vs panel physical pixels (GL = logical pixels).
+TOUCH_MAX_X = 3408
+TOUCH_MAX_Y = 2064
+PANEL_W = 2560
+PANEL_H = 1600
 RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
 POSTURE_FILE = os.path.join(RUNTIME_DIR, "z13-tablet-kit/posture")
 SETTINGS_FILE = os.path.join(RUNTIME_DIR, "z13ctl-plus/tablet-settings.json")
@@ -42,27 +48,186 @@ def find_touchscreen():
     return None
 
 
-def touch_scroll_settings():
+def touch_action_settings():
+    """Return (step_pixels, notches, context_menu_enabled, scale) or None if disabled."""
+    posture = ""
     try:
-        with open(POSTURE_FILE) as posture:
-            if posture.read().strip() == "desktop":
-                return None
+        with open(POSTURE_FILE) as stream:
+            posture = stream.read().strip()
     except OSError:
         return None
     sensitivity = 3
     speed = 2
+    context_menu = False
+    disable_touch_in_desktop = True
     try:
         with open(SETTINGS_FILE) as stream:
             settings = json.load(stream)
         sensitivity = settings.get("scroll_sensitivity", sensitivity)
         speed = settings.get("scroll_speed", speed)
+        context_menu = settings.get("two_finger_hold_context_menu") is True
+        disable_touch_in_desktop = (
+            settings.get("disable_touchscreen_in_desktop") is not False)
     except (AttributeError, OSError, ValueError):
         pass
+    if posture == "desktop" and disable_touch_in_desktop:
+        return None
     if not isinstance(sensitivity, int) or not 1 <= sensitivity <= 5:
         sensitivity = 3
     if not isinstance(speed, int) or not 1 <= speed <= 5:
         speed = 2
-    return SENSITIVITY_STEPS[sensitivity], speed
+    scale = 1.75 if posture == "tablet" else 1.5
+    return SENSITIVITY_STEPS[sensitivity], speed, context_menu, scale
+
+
+def new_state():
+    return {
+        "positions": {},       # slot → [X, Y]
+        "origins": {},         # slot → (X, Y) at touch-down
+        "current_slot": 0,
+        "ref_y": None,
+        "last_trigger": 0,
+        "step": SENSITIVITY_STEPS[3],
+        "notches": 2,
+        "gesture_enabled": False,
+        "context_menu_enabled": False,
+        "scale": 1.5,
+        "hold_armed": False,
+        "hold_emitted": False,
+        "hold_started": 0.0,
+    }
+
+
+def handle_event(state, event):
+    """Process one input event. Return True if a SYN_REPORT was seen."""
+    positions = state["positions"]
+    slot = state["current_slot"]
+
+    if event.type != evdev.ecodes.EV_ABS:
+        return (event.type == evdev.ecodes.EV_SYN
+                and event.code == evdev.ecodes.SYN_REPORT)
+
+    if event.code == evdev.ecodes.ABS_MT_SLOT:
+        state["current_slot"] = event.value
+        return False
+
+    slot = state["current_slot"]
+
+    if event.code == evdev.ecodes.ABS_MT_TRACKING_ID:
+        if event.value == -1:
+            positions.pop(slot, None)
+            state["origins"].pop(slot, None)
+            state["hold_armed"] = False
+        else:
+            if not positions:
+                settings = touch_action_settings()
+                state["gesture_enabled"] = settings is not None
+                if settings:
+                    state["step"], state["notches"], \
+                        state["context_menu_enabled"], state["scale"] = settings
+            positions[slot] = [None, None]
+            if len(positions) == 2:
+                state["hold_armed"] = (
+                    state["gesture_enabled"]
+                    and state["context_menu_enabled"])
+                state["hold_emitted"] = False
+                state["hold_started"] = time.monotonic()
+            elif len(positions) > 2:
+                state["hold_armed"] = False
+        return False
+
+    if slot not in positions:
+        return False
+
+    if event.code == evdev.ecodes.ABS_MT_POSITION_X:
+        positions[slot][0] = event.value
+    elif event.code == evdev.ecodes.ABS_MT_POSITION_Y:
+        positions[slot][1] = event.value
+    else:
+        return False
+
+    # Cancel hold on excessive movement.
+    point = positions[slot]
+    if None not in point:
+        origin = state["origins"].get(slot)
+        if origin is None:
+            state["origins"][slot] = tuple(point)
+        elif (abs(point[0] - origin[0]) > HOLD_MOVE
+              or abs(point[1] - origin[1]) > HOLD_MOVE):
+            state["hold_armed"] = False
+
+    return False
+
+
+def emit_scrolls(state, ui):
+    active = {
+        slot: point[1]
+        for slot, point in state["positions"].items()
+        if point[1] is not None
+    }
+    if not (state["gesture_enabled"] and len(active) >= MIN_FINGERS):
+        state["ref_y"] = None
+        return
+    avg = sum(active.values()) / len(active)
+    if state["ref_y"] is None:
+        state["ref_y"] = avg
+        state["last_trigger"] = 0
+    delta = avg - state["ref_y"]
+    step = state["step"]
+    while delta - state["last_trigger"] > step:
+        ui.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_WHEEL,
+                 -state["notches"])
+        ui.syn()
+        state["last_trigger"] += step
+    while state["last_trigger"] - delta > step:
+        ui.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_WHEEL,
+                 state["notches"])
+        ui.syn()
+        state["last_trigger"] -= step
+
+
+def check_hold(state, ui):
+    if (state["hold_armed"] and not state["hold_emitted"]
+            and len(state["positions"]) == 2
+            and len(state["origins"]) == 2
+            and time.monotonic() - state["hold_started"] >= HOLD_SECONDS):
+        emit_context_menu(state, ui)
+        state["hold_emitted"] = True
+
+
+def emit_context_menu(state, ui):
+    """Move the pointer to the touch centroid and right-click.
+
+    Wayland provides no programmatic context-menu trigger, so we relocate a
+    virtual pointer to the touch position and send a real BTN_RIGHT. REL needs
+    the current pointer position, which is not exposed; clamping to the
+    top-left with a large negative REL first makes the target deterministic.
+    """
+    xs = [p[0] for p in state["positions"].values() if p[0] is not None]
+    ys = [p[1] for p in state["positions"].values() if p[1] is not None]
+    if not xs or not ys:
+        return
+    touch_x = sum(xs) / len(xs)
+    touch_y = sum(ys) / len(ys)
+    # Device ABS -> physical panel px -> logical px at the current scale.
+    px = touch_x * PANEL_W / TOUCH_MAX_X / state["scale"]
+    py = touch_y * PANEL_H / TOUCH_MAX_Y / state["scale"]
+    # Clamp to top-left, then move to the target, then right-click.
+    ui.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_X, -100000)
+    ui.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_Y, -100000)
+    ui.syn()
+    time.sleep(0.05)
+    ui.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_X, round(px))
+    ui.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_Y, round(py))
+    ui.syn()
+    time.sleep(0.05)
+    ui.write(evdev.ecodes.EV_KEY, evdev.ecodes.BTN_RIGHT, 1)
+    ui.syn()
+    time.sleep(0.05)
+    ui.write(evdev.ecodes.EV_KEY, evdev.ecodes.BTN_RIGHT, 0)
+    ui.syn()
+    print(f"hold: EMIT right-click @ {px:.0f},{py:.0f}",
+          file=sys.stderr, flush=True)
 
 
 def main():
@@ -73,68 +238,29 @@ def main():
               file=sys.stderr)
         sys.exit(1)
 
-    # Create virtual mouse wheel device
     try:
         ui = evdev.UInput(
-            events={evdev.ecodes.EV_REL: [evdev.ecodes.REL_WHEEL]},
-            name="z13-touch-wheel")
+            events={
+                evdev.ecodes.EV_REL: [evdev.ecodes.REL_WHEEL,
+                                      evdev.ecodes.REL_X, evdev.ecodes.REL_Y],
+                evdev.ecodes.EV_KEY: [evdev.ecodes.BTN_LEFT,
+                                      evdev.ecodes.BTN_RIGHT],
+            },
+            name="z13-touch-actions")
     except Exception as e:
         print(f"Cannot create UInput device: {e}", file=sys.stderr)
         sys.exit(1)
 
     print(f"z13-touch-scroll: {dev.name} ({dev.path})", flush=True)
-    print(f"  {MIN_FINGERS}-finger swipe → mouse wheel", flush=True)
 
-    pos_y = {}            # slot → current Y
-    current_slot = 0
-    ref_y = None          # avg-Y when swipe started
-    last_trigger = 0      # last triggered delta position
-    gesture_enabled = False
-    step = SENSITIVITY_STEPS[3]
-    notches_per_step = 2
-
-    for event in dev.read_loop():
-        if event.type == evdev.ecodes.EV_ABS:
-            if event.code == evdev.ecodes.ABS_MT_SLOT:
-                current_slot = event.value
-            elif event.code == evdev.ecodes.ABS_MT_TRACKING_ID:
-                if event.value == -1:
-                    pos_y.pop(current_slot, None)
-                else:
-                    if not pos_y:
-                        settings = touch_scroll_settings()
-                        gesture_enabled = settings is not None
-                        if settings:
-                            step, notches_per_step = settings
-                    pos_y[current_slot] = None
-            elif event.code == evdev.ecodes.ABS_MT_POSITION_Y:
-                if current_slot in pos_y:
-                    pos_y[current_slot] = event.value
-
-        elif (event.type == evdev.ecodes.EV_SYN
-              and event.code == evdev.ecodes.SYN_REPORT):
-            active = {k: v for k, v in pos_y.items() if v is not None}
-
-            if gesture_enabled and len(active) >= MIN_FINGERS:
-                avg = sum(active.values()) / len(active)
-                if ref_y is None:
-                    ref_y = avg
-                    last_trigger = 0
-
-                delta = avg - ref_y  # positive = fingers moved down
-
-                while delta - last_trigger > step:
-                    ui.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_WHEEL,
-                             -notches_per_step)  # scroll down
-                    ui.syn()
-                    last_trigger += step
-                while last_trigger - delta > step:
-                    ui.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_WHEEL,
-                             notches_per_step)  # scroll up
-                    ui.syn()
-                    last_trigger -= step
-            else:
-                ref_y = None
+    state = new_state()
+    while True:
+        ready, _, _ = select.select([dev.fd], [], [], 0.05)
+        if ready:
+            for event in dev.read():
+                if handle_event(state, event):
+                    emit_scrolls(state, ui)
+        check_hold(state, ui)
 
 
 if __name__ == "__main__":

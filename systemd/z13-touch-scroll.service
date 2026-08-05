@@ -1,5 +1,5 @@
 [Unit]
-Description=z13 Touch Scroll (2-finger swipe to mouse wheel)
+Description=Z13 touchscreen actions (scroll and context menu)
 After=graphical-session.target
 
 [Service]
