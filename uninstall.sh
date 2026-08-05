@@ -51,4 +51,4 @@ fi
 systemctl --user daemon-reload
 sudo udevadm control --reload-rules
 sudo systemctl daemon-reload
-echo "==> removed. (maliit-keyboard left installed — remove with: pacman -Rns maliit-keyboard)"
+echo "==> removed. (on-screen keyboard package left installed — remove with: pacman -Rns plasma-keyboard)"

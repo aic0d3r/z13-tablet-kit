@@ -74,10 +74,11 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
   scrollback, opencode TUI, browsers, and document viewers. It follows the desktop touch policy.
   An opt-in stationary two-finger hold moves the pointer to the touch point and right-clicks,
   providing a context menu where KDE Wayland has no touch right-click.
-- `maliit-keyboard` — on-screen keyboard (AUR), auto-pops on touch-focus. The kit
-  restarts the active keyboard (`plasma-keyboard` or `maliit-keyboard`) on every
-  posture change, because it caches output geometry and would otherwise render
-  against a stale screen and clip keys after the panel/scale switch.
+- **On-screen keyboard** — `plasma-keyboard` (ships with Plasma 6.7, recommended)
+  or `maliit-keyboard` (AUR, legacy alternative); auto-pops on touch-focus. The kit
+  restarts whichever keyboard is active on every posture change, because it caches
+  output geometry and would otherwise render against a stale screen and clip keys
+  after the panel/scale switch.
 - **Folio touchpad** defaults to inhibited via udev because its firmware emits jumping-cursor
   events that libinput cannot filter. Members of `users` can explicitly opt in through
   `z13gui-plus`; every enable presents a warning.
@@ -89,7 +90,8 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
 - `z13ctl-plus` with its user socket and display coordinator commands available.
 - Membership in `users` (configured by `z13ctl-plus setup`) for the guarded touchpad toggle.
 - `python-evdev` (official repo) — for the uinput switch and touch scroll.
-- `maliit-keyboard` (AUR) — for the OSK.
+- `plasma-keyboard` (included with Plasma 6.7, recommended) for the OSK, or
+  `maliit-keyboard` (AUR) as a legacy alternative.
 - `/dev/uinput` write access for `z13-tablet-switch` and `z13-touch-scroll` is auto-granted
   by logind for the active graphical session — no group membership, no root daemon.
 - Touchscreen read access is granted via a udev `uaccess` rule (logind auto-sets ACL).
@@ -98,10 +100,12 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
 
 ```bash
 sudo pacman -S python-evdev
-paru -S maliit-keyboard
+# plasma-keyboard ships with Plasma 6.7; only install maliit-keyboard if you
+# prefer the legacy OSK:
+# paru -S maliit-keyboard
 cd ~/z13-tablet-kit
 ./install.sh        # idempotent; uses sudo for system cleanup and udev rules
-./uninstall.sh      # removes everything (leaves maliit-keyboard installed)
+./uninstall.sh      # removes everything (leaves the OSK package installed)
 # Then enable auto-rotate once: Quick Settings → Auto-rotate → right-click →
 # "Rotate only in tablet mode". The kit's virtual SW_TABLET_MODE gates it.
 ```
