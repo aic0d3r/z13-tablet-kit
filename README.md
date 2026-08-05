@@ -36,13 +36,16 @@ daemon — no repo reaches into another's state directly.
 
 ## Posture model
 
-| Posture | Detected by | Touch | Tablet mode | Auto-rotate |
-|---|---|---|---|---|
-| **desktop** | dock hub `0b05:1ac1` (external monitor) | off | off | off |
-| **laptop** | folio `0b05:1a30`, no dock | on | off | off |
-| **tablet** | neither | on | **on** | **on** |
+| Posture | Detected by | Touch | Tablet mode | Auto-rotate | Virtual keyboard |
+|---|---|---|---|---|---|
+| **desktop** | dock hub `0b05:1ac1` (external monitor) | off | off | off | off |
+| **laptop** | folio `0b05:1a30`, no dock | on | off | off | off |
+| **tablet** | neither | on | **on** | **on** | **on** |
 
 Priority: docked > folio > tablet. Attaching the folio never triggers tablet features.
+The virtual keyboard (plasma-keyboard / maliit) is gated on posture: it's forced `off`
+whenever a physical keyboard (folio or external) is present and only enabled in tablet
+mode, so it never pops up over a real keyboard.
 
 ## Components
 
