@@ -96,9 +96,3 @@ Logs/state: `journalctl --user -u z13-tablet-switch`,
   switch. If a portrait direction comes out mirrored on another unit, that's a sensor-mount
   quirk to fix in `iio-sensor-proxy`, not this kit.
 - Configure optional edge gestures in **System Settings → Workspace → Touchscreen Gestures**.
-
-## Credits
-
-The virtual `SW_TABLET_MODE` idea follows [m4rw3r/z13-tablet-switch](https://github.com/m4rw3r/z13-tablet-switch);
-this kit reuses the concept but adds **dock awareness** (so tablet mode never engages while
-docked) and unifies it with posture + touch in one stack.
