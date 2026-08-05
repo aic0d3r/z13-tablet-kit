@@ -136,10 +136,16 @@ Logs/state: `journalctl --user -u z13-tablet-switch`,
 
 ## Troubleshooting
 
-- **Touchscreen dead at the SDDM login screen.** The kit's udev rule grants the
-  touchscreen to your *logged-in* session, not to the pre-login greeter. If you want
-  touch at the greeter too, add the display-manager user to the `input` group:
-  `sudo usermod -aG input sddm`.
+- **Touchscreen dead at the SDDM login screen.** This is a system-level SDDM/logind
+  issue, **not** something the kit can fix — the kit runs only inside your logged-in
+  session. The Z13's SDDM runs a Wayland greeter whose `kwin_wayland` acquires devices
+  (DRM *and* input) via logind's `TakeDevice` API; on some setups logind does not grant
+  the greeter session the devices, so kwin starts degraded and the touchscreen is dead
+  even though the `sddm` user is in the `input`/`video` groups (kwin doesn't use group
+  perms at the greeter). Reliable workaround: switch the greeter to X11, where the
+  greeter's Xorg opens input directly via libinput and the `input` group membership
+  applies — drop in `/etc/sddm.conf.d/10-greeter-x11.conf` with `[General]` /
+  `DisplayServer=x11` and reboot. The post-login session stays Wayland.
 - **On-screen keyboard pops up with the folio attached.** It shouldn't — the kit forces
   the OSK `Off` outside tablet posture. If it still appears, run
   `~/.local/bin/dock laptop` (or the current posture) once to re-apply, or check
