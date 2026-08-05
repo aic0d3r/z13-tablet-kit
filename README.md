@@ -98,25 +98,78 @@ Priority: docked > folio > tablet. Attaching the folio never triggers tablet fea
   by logind for the active graphical session — no group membership, no root daemon.
 - Touchscreen read access is granted via a udev `uaccess` rule (logind auto-sets ACL).
 
-## Install / uninstall
+## Install
+
+The kit is one of three repos in the stack. **`z13ctl-plus` (the display/settings
+daemon) is a hard dependency** — install it first. `z13gui-plus` is optional (a
+touch overlay for the same toggles).
+
+### 1. Prerequisites
 
 ```bash
-sudo pacman -S python-evdev
-# plasma-keyboard ships with Plasma 6.7; only install maliit-keyboard if you
-# prefer the legacy OSK:
-# paru -S maliit-keyboard
-cd ~/z13-tablet-kit
-./install.sh        # idempotent; uses sudo for system cleanup and udev rules
-./uninstall.sh      # removes everything (leaves the OSK package installed)
-# Then enable auto-rotate once: Quick Settings → Auto-rotate → right-click →
-# "Rotate only in tablet mode". The kit's virtual SW_TABLET_MODE gates it.
+sudo pacman -S python-evdev iio-sensor-proxy
 ```
 
-Uninstall requests laptop defaults (scale 1.5, normal rotation, touchscreen on,
-tablet mode off) and uninhibits the folio touchpad.
+`iio-sensor-proxy` is for Plasma auto-rotate; `python-evdev` powers the virtual
+tablet-mode switch and touch scroll. `plasma-keyboard` ships with Plasma 6.7
+(recommended OSK); pick `maliit-keyboard` (AUR) only if you want the legacy one.
 
-Logs/state: `journalctl --user -u z13-tablet-switch`,
-`cat "$XDG_RUNTIME_DIR/z13-tablet-kit/posture"`.
+### 2. Install `z13ctl-plus` (required)
+
+```bash
+# AUR package
+paru -S z13ctl-plus-bin
+
+# …or from a release tarball:
+# wget https://github.com/aic0d3r/z13ctl-plus/releases/latest
+# tar xzf z13ctl-plus_*_linux_amd64.tar.gz
+# sudo install -Dm755 z13ctl-plus /usr/local/bin/z13ctl-plus
+# sudo z13ctl-plus setup
+```
+
+Then enable its user daemon (after stopping any other Z13 hardware daemon):
+
+```bash
+systemctl --user enable --now z13ctl-plus.socket z13ctl-plus.service
+```
+
+### 3. Install the kit
+
+```bash
+git clone https://github.com/aic0d3r/z13-tablet-kit
+cd z13-tablet-kit
+./install.sh
+```
+
+`install.sh` is idempotent and safe to re-run. It installs the posture manager,
+touch scroll, their user services, and the udev rules, then starts everything.
+
+### 4. Post-install (one-time)
+
+- **Log out and back in** if prompted — your `users` group membership (set up by
+  `z13ctl-plus setup`) only takes effect at login and is needed for the guarded
+  folio-touchpad toggle.
+- **Enable auto-rotate once:** Quick Settings → Auto-rotate → right-click →
+  "Rotate only in tablet mode". The kit's virtual `SW_TABLET_MODE` gates it.
+
+### Verify
+
+```bash
+systemctl --user status z13-tablet-switch z13-touch-scroll
+cat "$XDG_RUNTIME_DIR/z13-tablet-kit/posture"   # one of: desktop / laptop / tablet
+```
+
+### Uninstall
+
+```bash
+cd z13-tablet-kit
+./uninstall.sh
+```
+
+Uninstall returns to laptop defaults (scale 1.5, normal rotation, touchscreen on)
+and uninhibits the folio touchpad. The OSK package is left installed.
+
+Logs: `journalctl --user -u z13-tablet-switch`.
 
 ## Notes / optional tweaks
 
