@@ -1,7 +1,8 @@
 # z13-tablet-kit
 
 Posture-aware tablet stack for the **ASUS ROG Flow Z13 (GZ302, AMD Strix Halo)** on
-**KDE Plasma 6 / Wayland** (Arch / CachyOS). Turns the Z13 into a proper 3-mode device:
+**KDE Plasma 6 / Wayland**. It should run on any distro with Plasma 6 / Wayland and
+systemd (install docs use Arch / CachyOS). Turns the Z13 into a proper 3-mode device:
 it detects whether you're **docked**, using the **keyboard folio (laptop)**, or holding it
 as a **tablet**, and adapts the touchscreen, display, and auto-rotate accordingly — with no
 kernel hacks and only two udev rules needing root.
@@ -90,7 +91,7 @@ mode, so it never pops up over a real keyboard.
 
 ## Requirements
 
-- KDE Plasma 6 / Wayland, systemd, Arch or CachyOS (`kscreen-doctor`, `qdbus6`, and `gdbus`).
+- KDE Plasma 6 / Wayland and systemd (`kscreen-doctor`, `qdbus6`, and `gdbus`).
 - `iio-sensor-proxy` (default on CachyOS) — for Plasma auto-rotate.
 - `z13ctl-plus` with its user socket and display coordinator commands available.
 - Membership in `users` (configured by `z13ctl-plus setup`) for the guarded touchpad toggle.
@@ -112,6 +113,9 @@ touch overlay for the same toggles).
 ```bash
 sudo pacman -S python-evdev iio-sensor-proxy
 ```
+
+(`pacman` is the Arch / CachyOS package manager — use your distro's own for the
+same packages.)
 
 `iio-sensor-proxy` is for Plasma auto-rotate; `python-evdev` powers the virtual
 tablet-mode switch and touch scroll. `plasma-keyboard` ships with Plasma 6.7
