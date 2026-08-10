@@ -2,7 +2,9 @@
 
 Posture-aware tablet stack for the **ASUS ROG Flow Z13 (GZ302, AMD Strix Halo)** on
 **KDE Plasma 6 / Wayland**. It should run on any distro with Plasma 6 / Wayland and
-systemd (install docs use Arch / CachyOS). Turns the Z13 into a proper 3-mode device:
+systemd (install docs use Arch / CachyOS). 
+
+Turns the Z13 into a proper 3-mode device:
 it detects whether you're **docked**, using the **keyboard folio (laptop)**, or holding it
 as a **tablet**, and adapts the touchscreen, display, and auto-rotate accordingly — with no
 kernel hacks and only two udev rules needing root.
