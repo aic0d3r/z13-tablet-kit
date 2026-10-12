@@ -3,6 +3,11 @@
 All notable changes. Newest first. Releases are tagged from v1.0.0; older entries are
 grouped by date. The body of each release tag is its GitHub release notes.
 
+## v1.0.1 (2026-10-12)
+
+- Fix dock detection: in v1.0.0 the `dock` helper path overwrote the dock's USB id, so
+  `z13-tablet-switch` could not detect the ASUS dock hub. The helper is now `DOCK_HELPER`.
+
 ## v1.0.0 (2026-10-12)
 
 - AUR package `z13-tablet-kit` (`paru -S z13-tablet-kit`). It installs to

@@ -23,7 +23,7 @@ APPLY_INTERVAL = 30
 RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
 SETTINGS_FILE = Path(RUNTIME_DIR) / "z13ctl-plus/tablet-settings.json"
 # dock ships next to this script (~/.local/bin or /usr/lib/z13-tablet-kit).
-DOCK = Path(__file__).resolve().parent / "dock"
+DOCK_HELPER = Path(__file__).resolve().parent / "dock"
 Z13CTL_PLUS = Path.home() / ".local/bin/z13ctl-plus"
 if not Z13CTL_PLUS.exists():
     Z13CTL_PLUS = "z13ctl-plus"
@@ -127,7 +127,7 @@ def apply_posture(state, folio_present, settings):
     touchpad_enabled = False
     try:
         result = subprocess.run([
-            DOCK, state,
+            DOCK_HELPER, state,
             str(disable_touch_in_desktop).lower(),
         ], capture_output=True, text=True)
         if result.stdout:

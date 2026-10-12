@@ -105,7 +105,8 @@ class TabletSwitch(unittest.TestCase):
             self.assertTrue(sw.apply_posture("tablet", False, (True, False)))
 
     def test_dock_is_next_to_switch(self):
-        self.assertEqual(sw.DOCK, BIN / "dock")
+        self.assertEqual(sw.DOCK_HELPER, BIN / "dock")
+        self.assertEqual(sw.DOCK, (0x0B05, 0x1AC1))  # USB id, not shadowed by the helper path
 
     def test_missing_binaries_fail_softly(self):
         def run(cmd, **_):
