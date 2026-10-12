@@ -69,7 +69,7 @@ jobs:
       - name: Build and generate .SRCINFO
         run: |
           docker run --rm -v "$PWD/contrib/aur:/pkg" archlinux:latest \
-            bash -c "useradd -m builder && chown -R builder /pkg && su builder -c 'cd /pkg && makepkg --printsrcinfo > .SRCINFO && makepkg --nodeps --noconfirm'"
+            bash -c "pacman -Syu --noconfirm --needed base-devel >/dev/null && useradd -m builder && chown -R builder /pkg && su builder -c 'cd /pkg && makepkg --printsrcinfo > .SRCINFO && makepkg --nodeps --noconfirm'"
 
       - name: Configure SSH
         run: |
