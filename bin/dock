@@ -21,6 +21,7 @@ esac
 
 mkdir -p "$RUNDIR"
 chmod 700 "$RUNDIR"
+prev=$(cat "$STATEF" 2>/dev/null || true)
 
 # z13-tablet-switch retries this command until publication succeeds.
 publish_ok=true
@@ -92,6 +93,8 @@ dbus-send --session --dest=org.kde.KWin --type=method_call /VirtualKeyboard \
 # screen" and its keys get clipped at the edges. Restarting it lets KWin
 # relaunch it against the new output. The display reconfig is asynchronous, so
 # wait briefly first; run detached so this command never blocks posture apply.
-if pgrep -u "$(id -u)" -f 'plasma-keyboard|maliit-keyboard' >/dev/null 2>&1; then
-	(sleep 2; pkill -u "$(id -u)" -f 'plasma-keyboard|maliit-keyboard') >/dev/null 2>&1 &
+# Only on a real change: z13-tablet-switch re-runs dock every 30 s for recovery.
+# -x matches the process name only, not any command line mentioning it.
+if [ "$prev" != "$state" ] && pgrep -u "$(id -u)" -x 'plasma-keyboard|maliit-keyboard' >/dev/null 2>&1; then
+	(sleep 2; pkill -u "$(id -u)" -x 'plasma-keyboard|maliit-keyboard') >/dev/null 2>&1 &
 fi

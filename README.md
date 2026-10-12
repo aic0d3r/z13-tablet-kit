@@ -61,7 +61,8 @@ mode, so it never pops up over a real keyboard.
   Auto-rotate → right-click → "Rotate only in tablet mode". No separate rotation daemon is needed.
 - [`z13ctl-plus`](https://github.com/aic0d3r/z13ctl-plus) display coordinator — owns scale and refresh changes. Desktop and laptop use
   scale `1.5`; tablet posture uses scale `1.75`. Plasma retains tablet rotation unless an
-  explicit rotation intent is sent. This kit never invokes `kscreen-doctor` directly. Dock
+  explicit rotation intent is sent. This kit never changes outputs with `kscreen-doctor`; it
+  only reads rotation and scale to place touch context-menu clicks. Dock
   posture waits ten seconds for DRM topology to settle, and external outputs remain KDE-owned.
 - `z13-tablet-switch` (user) — polls the dock hub, folio, and DRM connectors every two seconds,
   then calls `dock` when posture changes. A non-eDP external display counts as `desktop`,

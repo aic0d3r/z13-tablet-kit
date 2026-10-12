@@ -13,6 +13,7 @@ Sensitivity, speed, and context-menu behavior are controlled through z13ctl-plus
 import json
 import os
 import select
+import subprocess
 import sys
 import time
 
@@ -49,7 +50,7 @@ def find_touchscreen():
 
 
 def touch_action_settings():
-    """Return (step_pixels, notches, context_menu_enabled, scale) or None if disabled."""
+    """Return (step_pixels, notches, context_menu_enabled) or None if disabled."""
     posture = ""
     try:
         with open(POSTURE_FILE) as stream:
@@ -76,8 +77,7 @@ def touch_action_settings():
         sensitivity = 3
     if not isinstance(speed, int) or not 1 <= speed <= 5:
         speed = 2
-    scale = 1.75 if posture == "tablet" else 1.5
-    return SENSITIVITY_STEPS[sensitivity], speed, context_menu, scale
+    return SENSITIVITY_STEPS[sensitivity], speed, context_menu
 
 
 def new_state():
@@ -86,12 +86,12 @@ def new_state():
         "origins": {},         # slot → (X, Y) at touch-down
         "current_slot": 0,
         "ref_y": None,
+        "fingers": 0,
         "last_trigger": 0,
         "step": SENSITIVITY_STEPS[3],
         "notches": 2,
         "gesture_enabled": False,
         "context_menu_enabled": False,
-        "scale": 1.5,
         "hold_armed": False,
         "hold_emitted": False,
         "hold_started": 0.0,
@@ -124,7 +124,7 @@ def handle_event(state, event):
                 state["gesture_enabled"] = settings is not None
                 if settings:
                     state["step"], state["notches"], \
-                        state["context_menu_enabled"], state["scale"] = settings
+                        state["context_menu_enabled"] = settings
             positions[slot] = [None, None]
             if len(positions) == 2:
                 state["hold_armed"] = (
@@ -165,6 +165,10 @@ def emit_scrolls(state, ui):
         for slot, point in state["positions"].items()
         if point[1] is not None
     }
+    # A finger landing or lifting shifts the average; re-anchor instead of scrolling.
+    if len(active) != state["fingers"]:
+        state["fingers"] = len(active)
+        state["ref_y"] = None
     if not (state["gesture_enabled"] and len(active) >= MIN_FINGERS):
         state["ref_y"] = None
         return
@@ -195,6 +199,37 @@ def check_hold(state, ui):
         state["hold_emitted"] = True
 
 
+def internal_display():
+    """Return (rotation, scale) of the enabled internal panel from KScreen, or None."""
+    try:
+        result = subprocess.run(["kscreen-doctor", "-j"], capture_output=True,
+                                text=True, timeout=2)
+        for output in json.loads(result.stdout)["outputs"]:
+            if output["name"].startswith("eDP") and output.get("enabled"):
+                return output["rotation"], output["scale"]
+    except (OSError, ValueError, KeyError, TypeError,
+            subprocess.TimeoutExpired):
+        pass
+    return None
+
+
+def to_logical(touch_x, touch_y, rotation, scale):
+    """Touch ABS -> logical px on the rotated panel.
+
+    KScreen rotation: 1 none, 2 left, 4 inverted, 8 right (same transforms as
+    xrandr's touchscreen matrices for left/inverted/right).
+    """
+    nx, ny = touch_x / TOUCH_MAX_X, touch_y / TOUCH_MAX_Y
+    w, h = PANEL_W / scale, PANEL_H / scale
+    if rotation == 2:
+        return (1 - ny) * h, nx * w
+    if rotation == 4:
+        return (1 - nx) * w, (1 - ny) * h
+    if rotation == 8:
+        return ny * h, (1 - nx) * w
+    return nx * w, ny * h
+
+
 def emit_context_menu(state, ui):
     """Move the pointer to the touch centroid and right-click.
 
@@ -207,11 +242,13 @@ def emit_context_menu(state, ui):
     ys = [p[1] for p in state["positions"].values() if p[1] is not None]
     if not xs or not ys:
         return
-    touch_x = sum(xs) / len(xs)
-    touch_y = sum(ys) / len(ys)
-    # Device ABS -> physical panel px -> logical px at the current scale.
-    px = touch_x * PANEL_W / TOUCH_MAX_X / state["scale"]
-    py = touch_y * PANEL_H / TOUCH_MAX_Y / state["scale"]
+    display = internal_display()
+    if display is None:
+        # A right-click at a guessed position is worse than none.
+        print("hold: skipped, internal display state unavailable",
+              file=sys.stderr, flush=True)
+        return
+    px, py = to_logical(sum(xs) / len(xs), sum(ys) / len(ys), *display)
     # Clamp to top-left, then move to the target, then right-click.
     ui.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_X, -100000)
     ui.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_Y, -100000)

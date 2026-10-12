@@ -63,12 +63,10 @@ def detected_posture():
 
 
 def tablet_settings():
+    # Only what this daemon applies; z13-touch-scroll reads scroll settings live.
     settings = {
         "disable_touchscreen_in_desktop": True,
-        "two_finger_hold_context_menu": False,
         "touchpad_enabled": False,
-        "scroll_sensitivity": 3,
-        "scroll_speed": 2,
     }
     try:
         with SETTINGS_FILE.open() as stream:
@@ -77,18 +75,9 @@ def tablet_settings():
             settings.update(loaded)
     except (OSError, ValueError):
         pass
-    sensitivity = settings["scroll_sensitivity"]
-    speed = settings["scroll_speed"]
-    if not isinstance(sensitivity, int) or not 1 <= sensitivity <= 5:
-        sensitivity = 3
-    if not isinstance(speed, int) or not 1 <= speed <= 5:
-        speed = 2
     return (
         settings["disable_touchscreen_in_desktop"] is not False,
-        settings["two_finger_hold_context_menu"] is True,
         settings["touchpad_enabled"] is True,
-        sensitivity,
-        speed,
     )
 
 
@@ -133,7 +122,7 @@ def report_integration(state, folio_present, healthy, error,
 
 
 def apply_posture(state, folio_present, settings):
-    disable_touch_in_desktop, _, touchpad_setting, _, _ = settings
+    disable_touch_in_desktop, touchpad_setting = settings
     touchscreen_enabled = not (
         state == "desktop" and disable_touch_in_desktop)
     touch_scroll_enabled = touchscreen_enabled
@@ -158,9 +147,12 @@ def apply_posture(state, folio_present, settings):
             state, folio_present, False, error, touchscreen_enabled,
             touch_scroll_enabled, touchpad_enabled)
         return False
-    return report_integration(
+    # The report only feeds the GUI health chip and is resent on the 30 s reapply;
+    # its failure must not block the tablet-mode switch.
+    report_integration(
         state, folio_present, True, "", touchscreen_enabled,
         touch_scroll_enabled, touchpad_enabled)
+    return True
 
 
 def main():
