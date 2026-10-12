@@ -1,9 +1,14 @@
 # Changelog
 
-All notable changes. Newest first. The kit is unversioned; entries are grouped by date.
+All notable changes. Newest first. Releases are tagged from v1.0.0; older entries are
+grouped by date. The body of each release tag is its GitHub release notes.
 
-## 2026-10-12
+## v1.0.0 (2026-10-12)
 
+- AUR package `z13-tablet-kit` (`paru -S z13-tablet-kit`). It installs to
+  `/usr/lib/z13-tablet-kit`, ships the user services and udev rules system-wide, and pulls
+  in `z13ctl-plus-bin`. `install.sh` remains for other distros and for running `master`.
+- `z13-tablet-switch` runs the `dock` next to itself instead of `~/.local/bin/dock`.
 - Display scale chosen in System Settings is no longer overwritten every 30 seconds.
   Needs [z13ctl-plus v2.2.1](https://github.com/aic0d3r/z13ctl-plus/releases/tag/v2.2.1):
   each posture restores the scale last used in it (defaults 1.5 desktop/laptop,
@@ -20,7 +25,7 @@ All notable changes. Newest first. The kit is unversioned; entries are grouped b
   clicks use the real rotation and scale.
 - `install.sh` detects python-evdev via import, so it works outside Arch.
 - Offline unit tests (`python3 -m unittest discover tests`), no hardware needed.
-- README rewrite.
+- README rewrite. Licensed under Apache-2.0.
 
 ## 2026-08-10
 

@@ -45,12 +45,15 @@ Arch / CachyOS.
 
 ## Quick start
 
+Arch / CachyOS (AUR):
+
 ```bash
-sudo pacman -S python-evdev iio-sensor-proxy          # prerequisites
-# install z13ctl-plus first (required) — see Install, step 2
-git clone https://github.com/aic0d3r/z13-tablet-kit
-cd z13-tablet-kit && ./install.sh
+paru -S z13-tablet-kit            # pulls in z13ctl-plus-bin and python-evdev
+systemctl --user enable --now z13ctl-plus.socket z13ctl-plus.service
+systemctl --user enable --now z13-tablet-switch.service z13-touch-scroll.service
 ```
+
+Other distros: see [Install from source](#install-from-source).
 
 Then enable auto-rotate once: **Quick Settings → Auto-rotate → right-click → "Rotate only in
 tablet mode"**.
@@ -191,58 +194,58 @@ and apply without restarts.
 ## Install
 
 > [!IMPORTANT]
-> **`z13ctl-plus` (the display/settings daemon) is a hard dependency** — install it first.
-> `z13gui-plus` is optional (a touch overlay for the same toggles).
+> **`z13ctl-plus` (the display/settings daemon) is a hard dependency.** The AUR package
+> pulls it in; from source, install it first. `z13gui-plus` is optional (a touch overlay for
+> the same toggles).
 
-### 1. Prerequisites
-
-```bash
-sudo pacman -S python-evdev iio-sensor-proxy
-```
-
-(`pacman` is the Arch / CachyOS package manager — use your distro's own for the
-same packages.)
-
-`iio-sensor-proxy` is for Plasma auto-rotate; `python-evdev` powers the virtual
-tablet-mode switch and touch scroll. `plasma-keyboard` ships with Plasma 6.7
-(recommended OSK); pick `maliit-keyboard` (AUR) only if you want the legacy one.
-
-### 2. Install `z13ctl-plus` (required)
+### AUR (Arch / CachyOS, recommended)
 
 ```bash
-# release tarball (recommended)
-wget https://github.com/aic0d3r/z13ctl-plus/releases/download/v2.1.0/z13ctl-plus_2.1.0_linux_amd64.tar.gz
-tar xzf z13ctl-plus_2.1.0_linux_amd64.tar.gz
-sudo install -Dm755 z13ctl-plus /usr/local/bin/z13ctl-plus
-sudo z13ctl-plus setup
-
-# …or the AUR package (outdated, see below)
-paru -S z13ctl-plus-bin
+paru -S z13-tablet-kit iio-sensor-proxy     # optional: z13gui-plus-bin
 ```
 
-> [!WARNING]
-> The AUR package (`z13ctl-plus-bin`) trails the GitHub releases (currently 1.3.1 vs.
-> **v2.1.0** — AUR updates are paused) and lacks the tablet integration. Prefer the
-> **release tarball** above.
-
-Then enable its user daemon (after stopping any other Z13 hardware daemon):
+Then, as your normal user (stop any other Z13 hardware daemon first):
 
 ```bash
 systemctl --user enable --now z13ctl-plus.socket z13ctl-plus.service
+systemctl --user enable --now z13-tablet-switch.service z13-touch-scroll.service
 ```
 
-### 3. Install the kit
+Updates arrive with your normal system update. Reboot (or re-attach the folio) once so the
+folio touchpad rule applies. If you used `install.sh` before, run its `./uninstall.sh`
+first: the copies in `~/.local` would override the package.
 
-```bash
-git clone https://github.com/aic0d3r/z13-tablet-kit
-cd z13-tablet-kit
-./install.sh
-```
+### Install from source
 
-`install.sh` is idempotent and safe to re-run. It installs the posture manager,
-touch scroll, their user services, and the udev rules, then starts everything.
+For other distros, or to run `master`.
 
-### 4. Post-install (one-time)
+1. **Prerequisites:** `python-evdev` and `iio-sensor-proxy`
+   (Arch: `sudo pacman -S python-evdev iio-sensor-proxy`; use your distro's package
+   manager elsewhere). `plasma-keyboard` ships with Plasma 6.7 (recommended OSK); pick
+   `maliit-keyboard` (AUR) only if you want the legacy one.
+2. **`z13ctl-plus`** from its release tarball:
+
+   ```bash
+   wget https://github.com/aic0d3r/z13ctl-plus/releases/download/v2.2.1/z13ctl-plus_2.2.1_linux_amd64.tar.gz
+   tar xzf z13ctl-plus_2.2.1_linux_amd64.tar.gz
+   sudo install -Dm755 z13ctl-plus /usr/local/bin/z13ctl-plus
+   sudo z13ctl-plus setup
+   systemctl --user enable --now z13ctl-plus.socket z13ctl-plus.service
+   ```
+
+3. **The kit:**
+
+   ```bash
+   git clone https://github.com/aic0d3r/z13-tablet-kit
+   cd z13-tablet-kit
+   ./install.sh
+   ```
+
+   `install.sh` is idempotent and safe to re-run. It installs the posture manager, touch
+   scroll, their user services, and the udev rules, then starts everything. To update:
+   `git pull && ./install.sh`.
+
+### Post-install (one-time)
 
 - **Log out and back in** if prompted — your `users` group membership (set up by
   `z13ctl-plus setup`) only takes effect at login and is needed for the guarded
@@ -262,12 +265,25 @@ cat "$XDG_RUNTIME_DIR/z13-tablet-kit/posture"   # one of: desktop / laptop / tab
 
 ## Uninstall
 
+**AUR:** first, as your user, stop the kit and reset the display:
+
+```bash
+systemctl --user disable --now z13-tablet-switch.service z13-touch-scroll.service
+/usr/lib/z13-tablet-kit/dock laptop      # touchscreen on, on-screen keyboard off
+z13ctl-plus display rotation none
+sudo pacman -R z13-tablet-kit
+```
+
+Then re-check System Settings → Keyboard → Virtual Keyboard.
+
+**From source:**
+
 ```bash
 cd z13-tablet-kit
 ./uninstall.sh
 ```
 
-Uninstall returns to laptop defaults (scale 1.5, normal rotation, touchscreen on)
+Uninstall returns to laptop defaults (normal rotation, touchscreen on)
 and uninhibits the folio touchpad. The OSK package is left installed. KWin saves the
 on-screen keyboard mode the kit switches, so uninstall restores the mode recorded by the
 first `install.sh` run; installs that predate this record print a note to re-check it in
@@ -290,3 +306,7 @@ System Settings.
   switch. If a portrait direction comes out mirrored on another unit, that's a sensor-mount
   quirk to fix in `iio-sensor-proxy`, not this kit.
 - Configure optional edge gestures in **System Settings → Workspace → Touchscreen Gestures**.
+
+## License
+
+[Apache-2.0](LICENSE)

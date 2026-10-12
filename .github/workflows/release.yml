@@ -1,0 +1,109 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.0.0) to republish to AUR'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y python3-evdev
+      - run: python3 -m unittest discover tests
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --notes-from-tag --title "$GITHUB_REF_NAME"
+
+  aur:
+    needs: release
+    runs-on: ubuntu-latest
+    if: >-
+      always() &&
+      !contains(github.event.inputs.tag || github.ref_name, '-') &&
+      (needs.release.result == 'success' || (github.event_name == 'workflow_dispatch' && needs.release.result == 'skipped'))
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Get version, sha256, and pkgrel
+        id: meta
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          URL="https://github.com/aic0d3r/z13-tablet-kit/archive/refs/tags/${TAG}.tar.gz"
+          SHA256=$(curl -fsSL "$URL" | sha256sum | cut -d' ' -f1)
+
+          # Compute pkgrel: increment if same version already on AUR, else 1
+          PKGREL=1
+          AUR_VER=$(curl -gfsSL "https://aur.archlinux.org/rpc/v5/info?arg[]=z13-tablet-kit" \
+            | jq -r '.results[0].Version // empty')
+          if [ -n "$AUR_VER" ]; then
+            AUR_PKGVER="${AUR_VER%-*}"
+            AUR_PKGREL="${AUR_VER##*-}"
+            if [ "$AUR_PKGVER" = "$VERSION" ] && [ -n "$AUR_PKGREL" ]; then
+              PKGREL=$((AUR_PKGREL + 1))
+            fi
+          fi
+
+          printf 'version=%s\nsha256=%s\npkgrel=%s\n' "$VERSION" "$SHA256" "$PKGREL" >> "$GITHUB_OUTPUT"
+
+      - name: Patch PKGBUILD
+        run: |
+          sed -i "s/PKGVER_PLACEHOLDER/${{ steps.meta.outputs.version }}/" contrib/aur/PKGBUILD
+          sed -i "s/PKGREL_PLACEHOLDER/${{ steps.meta.outputs.pkgrel }}/"  contrib/aur/PKGBUILD
+          sed -i "s/SHA256_PLACEHOLDER/${{ steps.meta.outputs.sha256 }}/"  contrib/aur/PKGBUILD
+
+      - name: Build and generate .SRCINFO
+        run: |
+          docker run --rm -v "$PWD/contrib/aur:/pkg" archlinux:latest \
+            bash -c "useradd -m builder && chown -R builder /pkg && su builder -c 'cd /pkg && makepkg --printsrcinfo > .SRCINFO && makepkg --nodeps --noconfirm'"
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AUR_KEY }}" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          for _ in 1 2 3; do
+            ssh-keyscan -t ed25519,ecdsa,rsa aur.archlinux.org >> ~/.ssh/known_hosts && break
+            sleep 5
+          done
+          test -s ~/.ssh/known_hosts
+          cat >> ~/.ssh/config <<'EOF'
+          Host aur.archlinux.org
+            IdentityFile ~/.ssh/aur
+            User aur
+          EOF
+
+      - name: Push to AUR
+        run: |
+          for _ in 1 2 3; do
+            rm -rf /tmp/aur-repo
+            git clone ssh://aur@aur.archlinux.org/z13-tablet-kit.git /tmp/aur-repo && break
+            sleep 5
+          done
+          test -d /tmp/aur-repo/.git
+          cp contrib/aur/PKGBUILD contrib/aur/.SRCINFO contrib/aur/z13-tablet-kit.install /tmp/aur-repo/
+          cd /tmp/aur-repo
+          git config user.name "Z13 Tablet Kit Release Bot"
+          git config user.email "funforfreeapps@gmail.com"
+          git add -A
+          git diff --cached --quiet && echo "No changes to push" && exit 0
+          git commit -m "Update to ${{ github.event.inputs.tag || github.ref_name }}"
+          for _ in 1 2 3; do
+            git push && exit 0
+            sleep 5
+          done
+          exit 1

@@ -104,6 +104,9 @@ class TabletSwitch(unittest.TestCase):
         with mock.patch.object(sw.subprocess, "run", run):
             self.assertTrue(sw.apply_posture("tablet", False, (True, False)))
 
+    def test_dock_is_next_to_switch(self):
+        self.assertEqual(sw.DOCK, BIN / "dock")
+
     def test_missing_binaries_fail_softly(self):
         def run(cmd, **_):
             raise FileNotFoundError(cmd[0])
