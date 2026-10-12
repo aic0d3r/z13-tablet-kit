@@ -52,7 +52,9 @@ if ! cur=$(gdbus call --session --dest "$DEST" --object-path "$path" \
 	echo "dock: touchscreen state unavailable" >&2
 	exit 1
 fi
+touch_changed=false
 if { [ "$want" = false ] && [[ "$cur" == *true* ]]; } || { [ "$want" = true ] && [[ "$cur" == *false* ]]; }; then
+	touch_changed=true
 	if ! gdbus call --session --dest "$DEST" --object-path "$path" \
 		--method org.freedesktop.DBus.Properties.Set "$IF" enabled "<$want>" >/dev/null 2>&1; then
 		echo "dock: touchscreen update failed" >&2
@@ -68,7 +70,10 @@ if [ "$publish_ok" = true ]; then
 		echo "dock: $state pending (posture state write failed, touch=$want)" >&2
 		exit 1
 	fi
-	echo "dock: $state (touch=$want)"
+	# The 30 s recovery re-run is silent unless it actually changed something.
+	if [ "$prev" != "$state" ] || [ "$touch_changed" = true ]; then
+		echo "dock: $state (touch=$want)"
+	fi
 else
 	echo "dock: $state pending (z13ctl-plus unavailable, touch=$want)" >&2
 	exit 1

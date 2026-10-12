@@ -25,6 +25,7 @@ SENSITIVITY_STEPS = {1: 180, 2: 135, 3: 90, 4: 60, 5: 30}
 HOLD_SECONDS = 0.65
 HOLD_MOVE = 25
 # Touchscreen ABS range vs panel physical pixels (GL = logical pixels).
+# shortcut: fixed GZ302 panel and native mode, read from KScreen if other panels must work.
 TOUCH_MAX_X = 3408
 TOUCH_MAX_Y = 2064
 PANEL_W = 2560
@@ -32,6 +33,7 @@ PANEL_H = 1600
 RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
 POSTURE_FILE = os.path.join(RUNTIME_DIR, "z13-tablet-kit/posture")
 SETTINGS_FILE = os.path.join(RUNTIME_DIR, "z13ctl-plus/tablet-settings.json")
+warned_no_posture = False
 
 
 def find_touchscreen():
@@ -51,11 +53,18 @@ def find_touchscreen():
 
 def touch_action_settings():
     """Return (step_pixels, notches, context_menu_enabled) or None if disabled."""
+    global warned_no_posture
     posture = ""
     try:
         with open(POSTURE_FILE) as stream:
             posture = stream.read().strip()
     except OSError:
+        # dock writes this only after z13ctl-plus accepts the posture.
+        if not warned_no_posture:
+            print(f"touch actions off: {POSTURE_FILE} missing "
+                  "(see journalctl --user -u z13-tablet-switch)",
+                  file=sys.stderr, flush=True)
+            warned_no_posture = True
         return None
     sensitivity = 3
     speed = 2
@@ -88,9 +97,7 @@ def new_state():
         "ref_y": None,
         "fingers": 0,
         "last_trigger": 0,
-        "step": SENSITIVITY_STEPS[3],
-        "notches": 2,
-        "gesture_enabled": False,
+        "gesture_enabled": False,  # step/notches are set with it on touch-down
         "context_menu_enabled": False,
         "hold_armed": False,
         "hold_emitted": False,
@@ -238,6 +245,9 @@ def emit_context_menu(state, ui):
     the current pointer position, which is not exposed; clamping to the
     top-left with a large negative REL first makes the target deterministic.
     """
+    # shortcut: the clamp hits the top-left of the whole layout, so with touch
+    # enabled in desktop and an output left of/above eDP the click lands off
+    # target; offset by the eDP position from kscreen-doctor if that matters.
     xs = [p[0] for p in state["positions"].values() if p[0] is not None]
     ys = [p[1] for p in state["positions"].values() if p[1] is not None]
     if not xs or not ys:

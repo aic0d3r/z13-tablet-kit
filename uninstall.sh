@@ -18,6 +18,15 @@ if [ -x "$DOCK" ]; then
 else
 	echo "WARNING: dock unavailable; touch and posture left unchanged"
 fi
+# dock's keyboard mode persists in kwinrc; put back the mode saved by install.sh.
+OSK_SAVE="${XDG_STATE_HOME:-$HOME/.local/state}/z13-tablet-kit/osk-mode"
+if [ -r "$OSK_SAVE" ] && gdbus call --session --dest org.kde.KWin --object-path /VirtualKeyboard \
+	--method org.freedesktop.DBus.Properties.Set org.kde.kwin.VirtualKeyboard mode \
+	"<int32 $(cat "$OSK_SAVE")>" >/dev/null 2>&1; then
+	rm -rf "$(dirname "$OSK_SAVE")"
+else
+	echo "NOTE: on-screen keyboard mode not restored; re-check the virtual keyboard setting in System Settings"
+fi
 if [ -n "$Z13CTL_PLUS" ]; then
 	"$Z13CTL_PLUS" display rotation none || echo "WARNING: z13ctl-plus unavailable; rotation state left unchanged"
 	"$Z13CTL_PLUS" tablet report --posture=laptop --folio-present=false \
@@ -43,7 +52,7 @@ for device in /sys/class/input/event*/device; do
 done
 
 # Restore the keyd configuration changed by older kit versions.
-if sudo test -e /etc/keyd/default.conf.z13-tablet-kit.bak; then
+if [ -e /etc/keyd/default.conf.z13-tablet-kit.bak ]; then
 	sudo mv -f -- /etc/keyd/default.conf.z13-tablet-kit.bak /etc/keyd/default.conf
 	if command -v keyd >/dev/null; then sudo keyd reload; fi
 fi

@@ -181,9 +181,14 @@ cd z13-tablet-kit
 ```
 
 Uninstall returns to laptop defaults (scale 1.5, normal rotation, touchscreen on)
-and uninhibits the folio touchpad. The OSK package is left installed.
+and uninhibits the folio touchpad. The OSK package is left installed. KWin saves the
+on-screen keyboard mode the kit switches, so uninstall restores the mode recorded by the
+first `install.sh` run; installs that predate this record print a note to re-check it in
+System Settings.
 
 Logs: `journalctl --user -u z13-tablet-switch`.
+
+Tests (offline, no hardware needed): `python3 -m unittest discover tests`.
 
 ## Notes / optional tweaks
 
@@ -192,6 +197,8 @@ Logs: `journalctl --user -u z13-tablet-switch`.
   defaults 3 and 2 preserve the original behavior.
 - **Touch context menus:** a stationary two-finger hold (~650 ms) moves the pointer to the
   touch point and sends a real right-click; moving either finger cancels into scrolling.
+  Known limit: with touch enabled in desktop posture and a monitor placed left of or above
+  the built-in panel, the click lands offset onto that monitor.
 - **Page Up/Down without dedicated keys:** the Z13 folio keyboard has no Page Up/Down
   keycaps, but **Fn+Up / Fn+Down** are mapped at firmware level and work everywhere.
 - **3-finger gestures** are reserved by KWin (desktop overview / virtual desktop

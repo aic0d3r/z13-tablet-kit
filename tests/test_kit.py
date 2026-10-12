@@ -3,6 +3,8 @@
 import importlib.machinery
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import types
@@ -101,6 +103,79 @@ class TabletSwitch(unittest.TestCase):
 
         with mock.patch.object(sw.subprocess, "run", run):
             self.assertTrue(sw.apply_posture("tablet", False, (True, False)))
+
+    def test_missing_binaries_fail_softly(self):
+        def run(cmd, **_):
+            raise FileNotFoundError(cmd[0])
+
+        with mock.patch.object(sw.subprocess, "run", run):
+            self.assertFalse(sw.apply_posture("tablet", False, (True, False)))
+
+
+STUBS = {
+    "qdbus6": 'echo /org/kde/KWin/InputDevice/event5',
+    "gdbus": 'echo "$*" >> "$LOG"\ncase "$*" in\n'
+             '  *" name") echo "(<\'ELAN9008:00 04F3:43C7\'>,)" ;;\n'
+             '  *Get*enabled) echo "(<$TOUCH>,)" ;;\nesac',
+    "z13ctl-plus": 'echo "$*" >> "$LOG"; exit "${PUBLISH_RC:-0}"',
+    "dbus-send": 'echo "dbus-send $*" >> "$LOG"',
+    "pgrep": 'exit 1',
+}
+
+
+class Dock(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        stubs = self.tmp / "stubs"
+        stubs.mkdir()
+        for name, body in STUBS.items():
+            (stubs / name).write_text(f"#!/bin/sh\n{body}\n")
+            (stubs / name).chmod(0o755)
+        self.log = self.tmp / "log"
+        self.posture = self.tmp / "z13-tablet-kit/posture"
+        self.env = {**os.environ, "PATH": f"{stubs}:{os.environ['PATH']}",
+                    "HOME": str(self.tmp), "XDG_RUNTIME_DIR": str(self.tmp),
+                    "LOG": str(self.log)}
+
+    def dock(self, *args, touch="true", publish_rc=0):
+        env = {**self.env, "TOUCH": touch, "PUBLISH_RC": str(publish_rc)}
+        return subprocess.run([str(BIN / "dock"), *args], env=env,
+                              capture_output=True, text=True)
+
+    def calls(self):
+        return self.log.read_text() if self.log.exists() else ""
+
+    def test_desktop_disables_touch_and_publishes(self):
+        result = self.dock("desktop", "true", touch="true")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("enabled <false>", self.calls())
+        self.assertIn("display posture desktop", self.calls())
+        self.assertIn("int32:0", self.calls())  # OSK off
+        self.assertEqual(self.posture.read_text(), "desktop\n")
+
+    def test_desktop_keeps_touch_when_policy_allows(self):
+        self.assertEqual(self.dock("desktop", "false", touch="true").returncode, 0)
+        self.assertNotIn("InputDevice enabled <", self.calls())  # no touch write
+
+    def test_tablet_enables_touch_and_osk(self):
+        self.assertEqual(self.dock("tablet", touch="false").returncode, 0)
+        self.assertIn("enabled <true>", self.calls())
+        self.assertIn("int32:1", self.calls())  # OSK touch-only
+
+    def test_failed_publish_keeps_old_posture(self):
+        result = self.dock("tablet", publish_rc=1)
+        self.assertEqual(result.returncode, 1)
+        self.assertFalse(self.posture.exists())
+
+    def test_rejects_bad_arguments(self):
+        self.assertEqual(self.dock("sideways").returncode, 2)
+        self.assertEqual(self.dock("tablet", "maybe").returncode, 2)
+
+    def test_unchanged_rerun_is_silent(self):
+        self.assertIn("dock: laptop", self.dock("laptop").stdout)
+        self.assertEqual(self.dock("laptop").stdout, "")
 
 
 if __name__ == "__main__":

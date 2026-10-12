@@ -30,9 +30,8 @@ if not Z13CTL_PLUS.exists():
 def usb(vid, pid):
     for d in glob.glob("/sys/bus/usb/devices/*-*"):
         try:
-            v = open(f"{d}/idVendor").read().strip()
-            p = open(f"{d}/idProduct").read().strip()
-            if v == "%04x" % vid and p == "%04x" % pid:
+            if (open(f"{d}/idVendor").read().strip() == "%04x" % vid
+                    and open(f"{d}/idProduct").read().strip() == "%04x" % pid):
                 return True
         except OSError:
             pass
@@ -64,21 +63,15 @@ def detected_posture():
 
 def tablet_settings():
     # Only what this daemon applies; z13-touch-scroll reads scroll settings live.
-    settings = {
-        "disable_touchscreen_in_desktop": True,
-        "touchpad_enabled": False,
-    }
     try:
         with SETTINGS_FILE.open() as stream:
             loaded = json.load(stream)
-        if isinstance(loaded, dict):
-            settings.update(loaded)
     except (OSError, ValueError):
-        pass
-    return (
-        settings["disable_touchscreen_in_desktop"] is not False,
-        settings["touchpad_enabled"] is True,
-    )
+        loaded = {}
+    if not isinstance(loaded, dict):
+        loaded = {}
+    return (loaded.get("disable_touchscreen_in_desktop") is not False,
+            loaded.get("touchpad_enabled") is True)
 
 
 def apply_touchpad(enabled, folio_present):
@@ -104,17 +97,21 @@ def report_integration(state, folio_present, healthy, error,
     def boolean(value):
         return str(value).lower()
 
-    result = subprocess.run([
-        Z13CTL_PLUS, "tablet", "report",
-        f"--posture={state}",
-        f"--folio-present={boolean(folio_present)}",
-        f"--healthy={boolean(healthy)}",
-        f"--error={error}",
-        f"--last-seen={int(time.time())}",
-        f"--touchscreen-enabled={boolean(touchscreen_enabled)}",
-        f"--touch-scroll-enabled={boolean(touch_scroll_enabled)}",
-        f"--touchpad-enabled={boolean(touchpad_enabled)}",
-    ], capture_output=True, text=True)
+    try:
+        result = subprocess.run([
+            Z13CTL_PLUS, "tablet", "report",
+            f"--posture={state}",
+            f"--folio-present={boolean(folio_present)}",
+            f"--healthy={boolean(healthy)}",
+            f"--error={error}",
+            f"--last-seen={int(time.time())}",
+            f"--touchscreen-enabled={boolean(touchscreen_enabled)}",
+            f"--touch-scroll-enabled={boolean(touch_scroll_enabled)}",
+            f"--touchpad-enabled={boolean(touchpad_enabled)}",
+        ], capture_output=True, text=True)
+    except OSError as exc:  # z13ctl-plus missing: report and keep polling
+        print(f"tablet integration report failed: {exc}", flush=True)
+        return False
     if result.returncode != 0:
         print(result.stderr.strip() or "tablet integration report failed", flush=True)
         return False
@@ -125,34 +122,30 @@ def apply_posture(state, folio_present, settings):
     disable_touch_in_desktop, touchpad_setting = settings
     touchscreen_enabled = not (
         state == "desktop" and disable_touch_in_desktop)
-    touch_scroll_enabled = touchscreen_enabled
-    result = subprocess.run([
-        Path.home() / ".local/bin/dock", state,
-        str(disable_touch_in_desktop).lower(),
-    ], capture_output=True, text=True)
-    if result.stdout:
-        print(result.stdout.strip(), flush=True)
-    if result.returncode != 0:
-        error = result.stderr.strip() or "posture application failed"
+    touchpad_enabled = False
+    try:
+        result = subprocess.run([
+            Path.home() / ".local/bin/dock", state,
+            str(disable_touch_in_desktop).lower(),
+        ], capture_output=True, text=True)
+        if result.stdout:
+            print(result.stdout.strip(), flush=True)
+        error = "" if result.returncode == 0 else (
+            result.stderr.strip() or "posture application failed")
+    except OSError as exc:  # dock missing: retry on the next poll
+        error = f"posture application failed: {exc}"
+    if not error:
+        # apply_touchpad returns a non-empty error exactly when it fails.
+        _, touchpad_enabled, error = apply_touchpad(
+            touchpad_setting, folio_present)
+    if error:
         print(error, flush=True)
-        report_integration(
-            state, folio_present, False, error, touchscreen_enabled,
-            touch_scroll_enabled, False)
-        return False
-    touchpad_ok, touchpad_enabled, error = apply_touchpad(
-        touchpad_setting, folio_present)
-    if not touchpad_ok:
-        print(error, flush=True)
-        report_integration(
-            state, folio_present, False, error, touchscreen_enabled,
-            touch_scroll_enabled, touchpad_enabled)
-        return False
     # The report only feeds the GUI health chip and is resent on the 30 s reapply;
     # its failure must not block the tablet-mode switch.
     report_integration(
-        state, folio_present, True, "", touchscreen_enabled,
-        touch_scroll_enabled, touchpad_enabled)
-    return True
+        state, folio_present, not error, error, touchscreen_enabled,
+        touchscreen_enabled, touchpad_enabled)
+    return not error
 
 
 def main():
@@ -182,12 +175,13 @@ def main():
                 applied_folio = folio_present
                 applied_settings = settings
                 last_apply = now
-        if state == applied_posture:
-            want = int(state == "tablet")
-            if want != switch_state:
-                ui.write(ecodes.EV_SW, SW, want)
-                ui.syn()
-                switch_state = want
+        # Follow detected posture, not apply success: a failed touch or
+        # z13ctl-plus update must not disable posture-gated auto-rotate.
+        want = int(state == "tablet")
+        if want != switch_state:
+            ui.write(ecodes.EV_SW, SW, want)
+            ui.syn()
+            switch_state = want
         time.sleep(POLL)
     ui.write(ecodes.EV_SW, SW, 0)
     ui.syn()

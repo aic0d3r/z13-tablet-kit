@@ -31,7 +31,7 @@ if command -v pacman >/dev/null; then
 fi
 
 # Restore the keyd configuration changed by older kit versions.
-if sudo test -e /etc/keyd/default.conf.z13-tablet-kit.bak; then
+if [ -e /etc/keyd/default.conf.z13-tablet-kit.bak ]; then
 	sudo mv -f -- /etc/keyd/default.conf.z13-tablet-kit.bak /etc/keyd/default.conf
 	if command -v keyd >/dev/null; then sudo keyd reload; fi
 fi
@@ -53,6 +53,16 @@ install -Dm644 "$KIT/systemd/z13-touch-scroll.service" "$UNITS/z13-touch-scroll.
 # --- system components (udev access/inhibit rules only) ---
 sudo install -Dm644 "$KIT/udev/99-elan-touchscreen-uaccess.rules"  "/etc/udev/rules.d/99-elan-touchscreen-uaccess.rules"
 sudo install -Dm644 "$KIT/udev/99-disable-asus-touchpad.rules"     "/etc/udev/rules.d/99-disable-asus-touchpad.rules"
+
+# dock overrides KWin's on-screen keyboard mode and KWin persists it in kwinrc.
+# Save the user's own mode once, before the kit first runs, for uninstall.sh.
+OSK_SAVE="${XDG_STATE_HOME:-$HOME/.local/state}/z13-tablet-kit/osk-mode"
+if [ ! -e "$OSK_SAVE" ] && ! systemctl --user -q is-active z13-tablet-switch.service \
+	&& mode=$(gdbus call --session --dest org.kde.KWin --object-path /VirtualKeyboard \
+		--method org.freedesktop.DBus.Properties.Get org.kde.kwin.VirtualKeyboard mode 2>/dev/null); then
+	mkdir -p "$(dirname "$OSK_SAVE")"
+	printf '%s\n' "${mode//[!0-9]/}" > "$OSK_SAVE"
+fi
 
 # --- reload + enable ---
 systemctl --user daemon-reload
