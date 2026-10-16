@@ -3,6 +3,12 @@
 All notable changes. Newest first. Releases are tagged from v1.0.0; older entries are
 grouped by date. The body of each release tag is its GitHub release notes.
 
+## v1.0.2 (2026-10-16)
+
+- Fix the on-screen keyboard disappearing after a posture change on Plasma 6.8. `dock`
+  restarts plasma-keyboard / maliit-keyboard with SIGKILL, because KWin only respawns
+  the input method after a crash exit and plasma-keyboard 6.8 exits cleanly on SIGTERM.
+
 ## v1.0.1 (2026-10-12)
 
 - Fix dock detection: in v1.0.0 the `dock` helper path overwrote the dock's USB id, so
