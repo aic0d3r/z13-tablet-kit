@@ -36,7 +36,7 @@ else
 	echo "WARNING: z13ctl-plus unavailable; display state left unchanged"
 fi
 
-sudo rm -f /etc/udev/rules.d/{99-elan-touchscreen-uaccess.rules,99-disable-asus-touchpad.rules} \
+sudo rm -f /etc/udev/rules.d/{70-elan-touchscreen-uaccess.rules,99-elan-touchscreen-uaccess.rules,99-disable-asus-touchpad.rules} \
             /usr/local/bin/z13-tablet-switch /etc/systemd/system/z13-tablet-switch.service
 rm -f ~/.local/bin/{dock,z13-tablet-switch,z13-touch-scroll,z13-rotate} \
       ~/.config/systemd/user/{z13-tablet-switch.service,z13-touch-scroll.service,z13-rotate.service}

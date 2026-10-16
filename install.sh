@@ -51,7 +51,9 @@ install -Dm644 "$KIT/systemd/z13-tablet-switch.service" "$UNITS/z13-tablet-switc
 install -Dm644 "$KIT/systemd/z13-touch-scroll.service" "$UNITS/z13-touch-scroll.service"
 
 # --- system components (udev access/inhibit rules only) ---
-sudo install -Dm644 "$KIT/udev/99-elan-touchscreen-uaccess.rules"  "/etc/udev/rules.d/99-elan-touchscreen-uaccess.rules"
+# Must sort before systemd's 73-seat-late.rules, which applies the uaccess ACL (#2).
+sudo install -Dm644 "$KIT/udev/70-elan-touchscreen-uaccess.rules"  "/etc/udev/rules.d/70-elan-touchscreen-uaccess.rules"
+sudo rm -f /etc/udev/rules.d/99-elan-touchscreen-uaccess.rules  # pre-v1.0.3 name
 sudo install -Dm644 "$KIT/udev/99-disable-asus-touchpad.rules"     "/etc/udev/rules.d/99-disable-asus-touchpad.rules"
 
 # dock overrides KWin's on-screen keyboard mode and KWin persists it in kwinrc.

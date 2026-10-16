@@ -3,6 +3,13 @@
 All notable changes. Newest first. Releases are tagged from v1.0.0; older entries are
 grouped by date. The body of each release tag is its GitHub release notes.
 
+## v1.0.3 (2026-10-16)
+
+- Fix the touchscreen ACL never being applied, which left `z13-touch-scroll` in a restart
+  loop for users outside the `input` group. The uaccess rule is now
+  `70-elan-touchscreen-uaccess.rules`, so it runs before systemd's `73-seat-late.rules`.
+  [#2](https://github.com/aic0d3r/z13-tablet-kit/issues/2), thanks @djanice1980.
+
 ## v1.0.2 (2026-10-16)
 
 - Fix the on-screen keyboard disappearing after a posture change on Plasma 6.8. `dock`
