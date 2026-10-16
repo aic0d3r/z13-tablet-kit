@@ -100,6 +100,8 @@ dbus-send --session --dest=org.kde.KWin --type=method_call /VirtualKeyboard \
 # wait briefly first; run detached so this command never blocks posture apply.
 # Only on a real change: z13-tablet-switch re-runs dock every 30 s for recovery.
 # -x matches the process name only, not any command line mentioning it.
+# SIGKILL, not SIGTERM: KWin respawns the input method only on a crash exit,
+# and plasma-keyboard 6.8 exits cleanly on SIGTERM, leaving no keyboard.
 if [ "$prev" != "$state" ] && pgrep -u "$(id -u)" -x 'plasma-keyboard|maliit-keyboard' >/dev/null 2>&1; then
-	(sleep 2; pkill -u "$(id -u)" -x 'plasma-keyboard|maliit-keyboard') >/dev/null 2>&1 &
+	(sleep 2; pkill -KILL -u "$(id -u)" -x 'plasma-keyboard|maliit-keyboard') >/dev/null 2>&1 &
 fi
