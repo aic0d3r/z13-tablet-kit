@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
-"""Poll Z13 posture, apply it, and expose a virtual SW_TABLET_MODE switch.
+"""Track Z13 posture, apply it, and expose a virtual SW_TABLET_MODE switch.
 
 The GZ302 advertises SW_TABLET_MODE over WMI but never emits it. This user daemon
 drives the virtual switch and asks dock to apply display/touch side effects
-when posture changes and periodically for restart recovery.
+when posture or settings change, with a slow re-apply for restart recovery.
+It sleeps in select() on kernel uevents (usb/drm hotplug) and inotify (settings),
+waking otherwise only for a cheap heartbeat.
 """
+import ctypes
 import glob
 import json
 import os
+import select
 import signal
+import socket
 import subprocess
 import time
 from pathlib import Path
@@ -18,8 +23,11 @@ DOCK = (0x0B05, 0x1AC1)   # ASUS dock hub  -> external monitor = desktop
 FOLIO = (0x0B05, 0x1A30)  # Z13 keyboard folio = laptop
 TOUCHPAD_NAME = "ASUSTeK Computer Inc. GZ302EA-Keyboard Touchpad"
 SW = ecodes.SW_TABLET_MODE
-POLL = 2
-APPLY_INTERVAL = 30
+FALLBACK_POLL = 5       # only when netlink/inotify are unavailable
+HEARTBEAT = 45          # GUI marks the heartbeat stale after 75 s
+REAPPLY_INTERVAL = 300  # full re-apply to recover from KWin/controller restarts
+RETRY_INTERVAL = 10     # after a failed apply
+SETTLE = 0.5            # let a burst of hotplug uevents finish before re-detecting
 RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
 SETTINGS_FILE = Path(RUNTIME_DIR) / "z13ctl-plus/tablet-settings.json"
 # dock ships next to this script (~/.local/bin or /usr/lib/z13-tablet-kit).
@@ -29,15 +37,16 @@ if not Z13CTL_PLUS.exists():
     Z13CTL_PLUS = "z13ctl-plus"
 
 
-def usb(vid, pid):
+def usb_ids():
+    """(vid, pid) of every attached USB device, in one sysfs scan."""
+    ids = set()
     for d in glob.glob("/sys/bus/usb/devices/*-*"):
         try:
-            if (open(f"{d}/idVendor").read().strip() == "%04x" % vid
-                    and open(f"{d}/idProduct").read().strip() == "%04x" % pid):
-                return True
-        except OSError:
+            ids.add((int(open(f"{d}/idVendor").read(), 16),
+                     int(open(f"{d}/idProduct").read(), 16)))
+        except (OSError, ValueError):
             pass
-    return False
+    return ids
 
 
 def ext_display_present():
@@ -55,8 +64,9 @@ def ext_display_present():
 
 
 def detected_posture():
-    folio_present = usb(*FOLIO)
-    if usb(*DOCK) or ext_display_present():
+    ids = usb_ids()
+    folio_present = FOLIO in ids
+    if DOCK in ids or ext_display_present():
         return "desktop", folio_present
     if folio_present:
         return "laptop", True
@@ -93,9 +103,14 @@ def apply_touchpad(enabled, folio_present):
     return False, False, "touchpad input unavailable"
 
 
-def report_integration(state, folio_present, healthy, error,
-                       touchscreen_enabled, touch_scroll_enabled,
-                       touchpad_enabled):
+_last_report = None
+
+
+def report_integration(*fields):
+    global _last_report
+    _last_report = fields
+    (state, folio_present, healthy, error, touchscreen_enabled,
+     touch_scroll_enabled, touchpad_enabled) = fields
     def boolean(value):
         return str(value).lower()
 
@@ -120,6 +135,12 @@ def report_integration(state, folio_present, healthy, error,
     return True
 
 
+def heartbeat():
+    """Cheap liveness ping: resend the last report with a fresh timestamp."""
+    if _last_report:
+        report_integration(*_last_report)
+
+
 def apply_posture(state, folio_present, settings):
     disable_touch_in_desktop, touchpad_setting = settings
     touchscreen_enabled = not (
@@ -142,12 +163,60 @@ def apply_posture(state, folio_present, settings):
             touchpad_setting, folio_present)
     if error:
         print(error, flush=True)
-    # The report only feeds the GUI health chip and is resent on the 30 s reapply;
+    # The report only feeds the GUI health chip and is resent by the heartbeat;
     # its failure must not block the tablet-mode switch.
     report_integration(
         state, folio_present, not error, error, touchscreen_enabled,
         touchscreen_enabled, touchpad_enabled)
     return not error
+
+
+def uevent_socket():
+    """Kernel uevents (usb/drm hotplug). None if unavailable -> polling fallback."""
+    try:
+        sock = socket.socket(
+            socket.AF_NETLINK, socket.SOCK_DGRAM | socket.SOCK_NONBLOCK,
+            15)  # NETLINK_KOBJECT_UEVENT (not exported by the socket module)
+        sock.bind((0, 1))
+        return sock
+    except OSError:
+        return None
+
+
+def relevant(sock):
+    """Drain the socket; True if any usb/drm event was queued."""
+    hit = False
+    while True:
+        try:
+            msg = sock.recv(8192)
+        except BlockingIOError:
+            return hit
+        hit = hit or b"\0SUBSYSTEM=usb\0" in msg or b"\0SUBSYSTEM=drm\0" in msg
+
+
+def settings_watch():
+    """inotify fd on the settings directory, or None (caller then polls)."""
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        fd = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
+        if fd < 0:
+            return None
+        # CLOSE_WRITE | MOVED_TO | CREATE | DELETE
+        if libc.inotify_add_watch(
+                fd, os.fsencode(SETTINGS_FILE.parent), 0x8 | 0x80 | 0x100 | 0x200) >= 0:
+            return fd
+        os.close(fd)
+    except (OSError, AttributeError):
+        pass
+    return None
+
+
+def drain(fd):
+    try:
+        while os.read(fd, 4096):
+            pass
+    except BlockingIOError:
+        pass
 
 
 def main():
@@ -160,23 +229,28 @@ def main():
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
+    # select() retries after a signal; a byte on this pipe ends the wait at once.
+    wake_r, wake_w = socket.socketpair()
+    wake_r.setblocking(False)
+    wake_w.setblocking(False)
+    signal.set_wakeup_fd(wake_w.fileno())
+    uevents = uevent_socket()
+    watch = settings_watch()
     switch_state = None
-    applied_posture = None
-    applied_folio = None
-    applied_settings = None
-    last_apply = 0.0
+    applied = None  # (posture, folio, settings) of the last successful apply
+    next_apply = next_beat = 0.0
     while not stopping:
-        state, folio_present = detected_posture()
-        settings = tablet_settings()
+        state, folio_present, settings = (*detected_posture(), tablet_settings())
         now = time.monotonic()
-        if (state != applied_posture or folio_present != applied_folio
-                or settings != applied_settings
-                or now - last_apply >= APPLY_INTERVAL):
-            if apply_posture(state, folio_present, settings):
-                applied_posture = state
-                applied_folio = folio_present
-                applied_settings = settings
-                last_apply = now
+        if (state, folio_present, settings) != applied or now >= next_apply:
+            ok = apply_posture(state, folio_present, settings)
+            applied = (state, folio_present, settings) if ok else None
+            now = time.monotonic()
+            next_apply = now + (REAPPLY_INTERVAL if ok else RETRY_INTERVAL)
+            next_beat = now + HEARTBEAT  # apply already reported
+        elif now >= next_beat:
+            heartbeat()
+            next_beat = now + HEARTBEAT
         # Follow detected posture, not apply success: a failed touch or
         # z13ctl-plus update must not disable posture-gated auto-rotate.
         want = int(state == "tablet")
@@ -184,7 +258,18 @@ def main():
             ui.write(ecodes.EV_SW, SW, want)
             ui.syn()
             switch_state = want
-        time.sleep(POLL)
+        # Sleep until the next deadline or a hotplug / settings event.
+        timeout = max(0.0, min(next_apply, next_beat) - time.monotonic())
+        if uevents is None or watch is None:
+            timeout = min(timeout, FALLBACK_POLL)
+            watch = watch or settings_watch()
+        sources = [x for x in (uevents, watch, wake_r) if x is not None]
+        ready = select.select(sources, [], [], timeout)[0]
+        if watch in ready:
+            drain(watch)
+        if uevents in ready and relevant(uevents):
+            time.sleep(SETTLE)
+            relevant(uevents)
     ui.write(ecodes.EV_SW, SW, 0)
     ui.syn()
     ui.close()

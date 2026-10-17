@@ -130,8 +130,9 @@ intentionally dropped the old "force bigger UI in tablet mode" behavior,
 
 Applies posture changes supplied by `z13-tablet-switch`: it toggles the internal touchscreen
 (ELAN9008) through KWin D-Bus and publishes posture to `z13ctl-plus`. Failed applications are
-retried, and posture is republished every 30 seconds to recover cleanly from KWin or controller
-restarts.
+retried every 10 seconds, and posture is republished every 5 minutes to recover cleanly from KWin
+or controller restarts. `z13-tablet-switch` sleeps on kernel hotplug uevents and an inotify watch
+on the settings file (no polling) and sends a cheap heartbeat every 45 seconds.
 
 ### `z13-touch-scroll`
 

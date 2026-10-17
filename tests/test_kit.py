@@ -108,6 +108,33 @@ class TabletSwitch(unittest.TestCase):
         self.assertEqual(sw.DOCK_HELPER, BIN / "dock")
         self.assertEqual(sw.DOCK, (0x0B05, 0x1AC1))  # USB id, not shadowed by the helper path
 
+    def test_heartbeat_resends_last_report_with_fresh_timestamp(self):
+        calls = []
+        run = lambda cmd, **_: calls.append(cmd) or types.SimpleNamespace(
+            returncode=0, stdout="", stderr="")
+        with mock.patch.object(sw.subprocess, "run", run):
+            sw.report_integration("desktop", True, True, "", False, False, False)
+            with mock.patch.object(sw.time, "time", lambda: 12345):
+                sw.heartbeat()
+        self.assertEqual(len(calls), 2)
+        self.assertIn("--last-seen=12345", calls[1])
+        self.assertEqual(calls[0][2:5], calls[1][2:5])
+
+    def test_event_sources_open_and_filter(self):
+        sock = sw.uevent_socket()
+        self.assertTrue(sock is None or sock.fileno() >= 0)  # None only without netlink
+        if sock:
+            sock.close()
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(
+                sw, "SETTINGS_FILE", Path(tmp) / "s.json"):
+            fd = sw.settings_watch()
+            self.assertIsNotNone(fd)
+            (Path(tmp) / "s.json").write_text("{}")
+            import select
+            self.assertTrue(select.select([fd], [], [], 1)[0])
+            sw.drain(fd)
+            os.close(fd)
+
     def test_missing_binaries_fail_softly(self):
         def run(cmd, **_):
             raise FileNotFoundError(cmd[0])

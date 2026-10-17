@@ -3,6 +3,13 @@
 All notable changes. Newest first. Releases are tagged from v1.0.0; older entries are
 grouped by date. The body of each release tag is its GitHub release notes.
 
+## Unreleased
+
+- Cut idle wakeups and process spawns in `z13-tablet-switch`: it now waits on usb/drm
+  uevents and an inotify watch instead of polling every 2 s, scans USB once per detection,
+  sends a lightweight 45 s heartbeat (one `z13ctl-plus` call) and only re-runs `dock` on
+  change, after a failure (10 s retry), or every 5 minutes.
+
 ## v1.0.3 (2026-10-16)
 
 - Fix the touchscreen ACL never being applied, which left `z13-touch-scroll` in a restart
