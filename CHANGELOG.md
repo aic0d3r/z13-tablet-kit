@@ -3,7 +3,7 @@
 All notable changes. Newest first. Releases are tagged from v1.0.0; older entries are
 grouped by date. The body of each release tag is its GitHub release notes.
 
-## Unreleased
+## v1.0.4 (2026-10-17)
 
 - Cut idle wakeups and process spawns in `z13-tablet-switch`: it now waits on usb/drm
   uevents and an inotify watch instead of polling every 2 s, scans USB once per detection,
