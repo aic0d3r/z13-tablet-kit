@@ -5,6 +5,7 @@
 [![Device](https://img.shields.io/badge/device-ROG%20Flow%20Z13%20GZ302-red)](#requirements)
 [![Desktop](https://img.shields.io/badge/desktop-KDE%20Plasma%206%20%2F%20Wayland-1d99f3)](#requirements)
 [![Distro](https://img.shields.io/badge/tested%20on-Arch%20%2F%20CachyOS-1793d1)](#install)
+[![AUR](https://img.shields.io/aur/version/z13-tablet-kit)](https://aur.archlinux.org/packages/z13-tablet-kit)
 [![Tests](https://img.shields.io/badge/tests-offline%2C%20no%20hardware-brightgreen)](#verify)
 
 [Features](#features) •
@@ -19,77 +20,86 @@
 
 </div>
 
-A posture-aware tablet stack for the **ASUS ROG Flow Z13 (GZ302, AMD Strix Halo)** on
-**KDE Plasma 6 / Wayland**. It detects whether the Z13 is **docked**, used as a **laptop** with
-the keyboard folio, or held as a **tablet**, and adapts the touchscreen, display scale,
-auto-rotate and on-screen keyboard to match — with **no kernel hacks** and only two udev rules
-needing root.
+<img src="docs/z13gui-plus-tablet-kit.png" align="right" width="300"
+     alt="Z13GUI+ Tablet Kit card in desktop posture: posture, health and keyboard folio status, toggles for disabling the touchscreen on desktop, two-finger hold context menu and keeping scale across postures, plus scroll sensitivity and speed sliders.">
 
-It should run on any distro with Plasma 6 / Wayland and systemd; the install steps use
-Arch / CachyOS.
+A posture-aware tablet mode for the **2025 ASUS ROG Flow Z13 (GZ302, AMD Strix Halo)** 3-in-1 on
+**Linux with KDE Plasma 6 / Wayland**. It detects whether the Z13 is **docked**, used as a
+**laptop** with the keyboard folio, or held as a **tablet**, and adapts the touchscreen,
+display scale, auto-rotate and on-screen keyboard to match. No kernel patches; the only
+root-owned pieces are two udev rules.
+
+It should run on any distro with Plasma 6 / Wayland and systemd. The install steps target
+Arch / CachyOS. The screenshot shows the kit's settings in the optional
+[`z13gui-plus`](#z13gui-plus) drawer.
 
 ## Features
 
 - **Automatic 3-mode posture** — desktop, laptop and tablet, detected from the dock hub, the
-  folio and the connected displays every two seconds.
+  folio and the connected displays the moment something is plugged in or unplugged.
 - **Auto-rotate that only rotates in tablet mode** — via a virtual `SW_TABLET_MODE` switch the
   GZ302 firmware advertises but never emits.
 - **On-screen keyboard that never covers a real one** — on in tablet mode, forced off whenever
   the folio or an external keyboard is attached.
 - **Two-finger scroll in any app** — terminals, TUIs, browsers, document viewers.
-- **Touch right-click** — a two-finger hold opens the context menu KDE Wayland lacks.
+- **Touch right-click** — a two-finger hold opens a context menu, which KDE Wayland has no
+  touch gesture for.
 - **Tablet scaling** — each posture remembers its scale; defaults are `1.75` in tablet
   posture and `1.5` docked and as a laptop.
 - **Folio touchpad fix** — the jumpy touchpad is inhibited by default, with a guarded opt-in.
 - **Live settings, no restarts** — toggles in the optional `z13gui-plus` drawer apply instantly.
 
+<br clear="right">
+
 ## Quick start
 
-Arch / CachyOS (AUR):
+Arch / CachyOS (AUR), as your normal user. Stop any other Z13 hardware daemon first.
 
 ```bash
-paru -S z13-tablet-kit            # pulls in z13ctl-plus-bin and python-evdev
+paru -S z13-tablet-kit iio-sensor-proxy   # pulls in z13ctl-plus-bin; optional: z13gui-plus-bin
 systemctl --user enable --now z13ctl-plus.socket z13ctl-plus.service
 systemctl --user enable --now z13-tablet-switch.service z13-touch-scroll.service
 ```
 
-Other distros: see [Install from source](#install-from-source).
-
 Then enable auto-rotate once: **Quick Settings → Auto-rotate → right-click → "Rotate only in
-tablet mode"**.
+tablet mode"**, and reboot (or re-attach the folio) so the folio touchpad rule applies.
+
+Other distros: see [Install from source](#install-from-source).
 
 ## Posture model
 
 | Posture | Detected by | Touch | Tablet mode | Auto-rotate | Virtual keyboard |
 |---|---|---|---|---|---|
-| **desktop** | dock hub `0b05:1ac1` (external monitor) | off | off | off | off |
+| **desktop** | dock hub `0b05:1ac1` or any external monitor | off¹ | off | off | off |
 | **laptop** | folio `0b05:1a30`, no dock | on | off | off | off |
 | **tablet** | neither | on | **on** | **on** | **on** |
 
-Priority: docked > folio > tablet. Attaching the folio never triggers tablet features.
-The virtual keyboard (plasma-keyboard / maliit) is gated on posture: it's forced `off`
-whenever a physical keyboard (folio or external) is present and only enabled in tablet
-mode, so it never pops up over a real keyboard.
+¹ Unless **Disable touchscreen on desktop** is turned off in `z13gui-plus`.
+
+Priority: desktop > laptop > tablet. Attaching the folio never triggers tablet features.
+The virtual keyboard (plasma-keyboard / maliit) is forced off whenever a physical keyboard
+(folio or external) is present, so it never pops up over a real one.
 
 ## The stack
 
-This kit is one of three cooperating repos. Install all three on the same machine:
+This kit is one of three cooperating repos. Install them on the same machine:
 
 | Repo | Role |
 |---|---|
 | [z13-tablet-kit](https://github.com/aic0d3r/z13-tablet-kit) | posture detection and touch input — **this repo** |
 | [z13ctl-plus](https://github.com/aic0d3r/z13ctl-plus) | daemon that owns display state and persists tablet settings (**required**) |
-| [z13gui-plus](https://github.com/aic0d3r/z13gui-plus) | optional GTK4 overlay drawer: live posture/health chip and tablet toggles |
+| [z13gui-plus](https://github.com/aic0d3r/z13gui-plus) | optional GTK4 overlay drawer: live posture/health chip and tablet settings |
 
 How they work together:
 
 1. `z13-tablet-switch` detects dock/folio/tablet posture and applies it through
    `dock` (touchscreen toggle, virtual tablet-mode switch).
 2. `dock` publishes posture to the `z13ctl-plus` daemon, which serializes scale
-   and rotation changes via `kscreen-doctor` (restoring each posture's last scale; tablet defaults to 1.75).
+   and rotation changes via `kscreen-doctor`, restoring the scale last used in each posture.
 3. `z13gui-plus` shows the live posture/health chip and exposes the tablet
-   toggles: desktop touch policy, two-finger context menus, folio touchpad
-   opt-in, scroll speed.
+   settings: **Disable touchscreen on desktop**, **Two-finger hold context menu**,
+   **Keep scale across postures**, the folio touchpad opt-in, and scroll sensitivity
+   and speed.
 4. `z13ctl-plus` persists those settings and projects them to
    `$XDG_RUNTIME_DIR/z13ctl-plus/tablet-settings.json`; `z13-tablet-switch` and
    `z13-touch-scroll` read the projection and apply changes live, without
@@ -97,7 +107,7 @@ How they work together:
 
 > [!NOTE]
 > Ownership is one-directional: only the kit writes the posture file, only `z13ctl-plus`
-> writes tablet settings, and the GUI is a read/write client of the daemon — no repo reaches
+> writes tablet settings, and the GUI is a read/write client of the daemon. No repo reaches
 > into another's state directly.
 
 ## Components
@@ -105,19 +115,23 @@ How they work together:
 | Component | Runs as | Job |
 |---|---|---|
 | [`z13-tablet-switch`](#z13-tablet-switch) | user service | detects posture, owns the virtual tablet-mode switch |
-| [`dock`](#dock) | called by the switch | applies posture: touchscreen, publish to `z13ctl-plus` |
+| [`dock`](#dock) | called by the switch | applies posture: touchscreen, OSK mode, publish to `z13ctl-plus` |
 | [`z13-touch-scroll`](#z13-touch-scroll) | user service | two-finger scroll and right-click |
 | [Auto-rotate](#auto-rotate) | Plasma | rotation, gated on tablet mode |
 | [On-screen keyboard](#on-screen-keyboard) | Plasma | OSK, gated on posture |
 | [Folio touchpad](#folio-touchpad) | udev rule | inhibited by default |
-| [`z13ctl-plus`](#z13ctl-plus-display-coordinator) | user daemon | scale and refresh changes, settings |
-| [`z13gui-plus`](#z13gui-plus) | optional GUI | live status and toggles |
+| [`z13ctl-plus`](#z13ctl-plus-display-coordinator) | user daemon | scale and refresh changes, persists settings |
+| [`z13gui-plus`](#z13gui-plus) | optional GUI | live status and settings |
 
 ### `z13-tablet-switch`
 
-Polls the dock hub, folio, and DRM connectors every two seconds, then calls `dock` when posture
-changes. A non-eDP external display counts as `desktop`, so any USB-C dock or HDMI cable works.
-It also creates a virtual `SW_TABLET_MODE` uinput switch flipped on only in tablet posture. The
+Watches the dock hub, folio, and DRM connectors and calls `dock` when posture changes. It
+sleeps on kernel hotplug uevents and an inotify watch on the settings file instead of polling,
+sends a lightweight heartbeat to `z13ctl-plus` every 45 seconds, retries a failed apply every
+10 seconds, and re-applies posture every 5 minutes to recover from KWin or `z13ctl-plus`
+restarts. Any non-eDP display counts as `desktop`, so any USB-C dock or HDMI cable works.
+
+It also creates a virtual `SW_TABLET_MODE` uinput switch that is on only in tablet posture. The
 GZ302's WMI path advertises the switch but never emits it, so Plasma otherwise has nothing to
 gate "rotate only in tablet mode" on.
 
@@ -128,93 +142,81 @@ intentionally dropped the old "force bigger UI in tablet mode" behavior,
 
 ### `dock`
 
-Applies posture changes supplied by `z13-tablet-switch`: it toggles the internal touchscreen
-(ELAN9008) through KWin D-Bus and publishes posture to `z13ctl-plus`. Failed applications are
-retried every 10 seconds, and posture is republished every 5 minutes to recover cleanly from KWin
-or controller restarts. `z13-tablet-switch` sleeps on kernel hotplug uevents and an inotify watch
-on the settings file (no polling) and sends a cheap heartbeat every 45 seconds.
+Applies the posture supplied by `z13-tablet-switch`: it toggles the internal touchscreen
+(ELAN9008) through KWin D-Bus, sets the on-screen keyboard mode, and publishes posture to
+`z13ctl-plus`.
 
 ### `z13-touch-scroll`
 
-Reads the ELAN9008 touchscreen and detects 2-finger vertical swipes, injecting mouse wheel events
-via evdev UInput. Works in **any** app: terminal scrollback, opencode TUI, browsers, and document
-viewers. It follows the desktop touch policy. An opt-in stationary two-finger hold moves the
-pointer to the touch point and right-clicks, providing a context menu where KDE Wayland has no
-touch right-click.
+Reads the ELAN9008 touchscreen, detects two-finger vertical swipes, and injects mouse-wheel
+events via evdev UInput. Works in **any** app: terminal scrollback, TUIs, browsers, and document
+viewers. It stays idle in desktop posture while **Disable touchscreen on desktop** is on. With
+**Two-finger hold context menu** enabled, a stationary two-finger hold moves the pointer to the
+touch point and right-clicks, since KDE Wayland has no touch right-click.
 
 ### Auto-rotate
 
 Plasma-native, gated on the virtual `SW_TABLET_MODE` switch above. `iio-sensor-proxy` (default
-on CachyOS) reads the accelerometer; enable once via Quick Settings → Auto-rotate → right-click →
-"Rotate only in tablet mode". No separate rotation daemon is needed.
+on CachyOS) reads the accelerometer. No separate rotation daemon is needed; just enable
+"Rotate only in tablet mode" once (see [Quick start](#quick-start)).
 
 ### On-screen keyboard
 
 `plasma-keyboard` (ships with Plasma 6.7, recommended) or `maliit-keyboard` (AUR, legacy
-alternative); auto-pops on touch-focus. The kit gates it on posture — `TouchOnly` in tablet mode,
-forced `Off` whenever the folio or an external keyboard is attached (KWin would otherwise pop the
-OSK on any touch device). It also restarts the active keyboard on every posture change, because
-it caches output geometry and would otherwise render against a stale screen and clip keys after
-the panel/scale switch.
+alternative); it pops up when a text field gets touch focus. The kit gates it on posture:
+`TouchOnly` in tablet mode, forced `Off` whenever the folio or an external keyboard is attached
+(KWin would otherwise pop the OSK on any touch device). It also restarts the keyboard on every
+posture change, because the keyboard caches output geometry and would otherwise clip its keys
+after a screen or scale switch.
 
 ### Folio touchpad
 
-Defaults to inhibited via udev because its firmware emits jumping-cursor events that libinput
-cannot filter. Members of `users` can explicitly opt in through `z13gui-plus`; every enable
-presents a warning.
+Inhibited by default via udev, because its firmware emits jumping-cursor events that libinput
+cannot filter. Members of `users` can opt back in through `z13gui-plus`, which shows a warning
+each time.
 
 ### `z13ctl-plus` display coordinator
 
 [`z13ctl-plus`](https://github.com/aic0d3r/z13ctl-plus) owns scale and refresh changes. On a posture
 change it restores the scale last used in that posture (defaults: desktop/laptop `1.5`, tablet
-`1.75`); a scale set in System Settings is never overridden. Plasma retains tablet rotation
-unless an explicit rotation intent is sent. This kit never changes outputs with
-`kscreen-doctor`; it only reads rotation and scale to place touch context-menu clicks. Dock
-posture waits ten seconds for DRM topology to settle, and external outputs remain KDE-owned.
+`1.75`), so a scale you set in System Settings sticks to that posture. Turn on **Keep scale
+across postures** to stop scale changes entirely. Plasma keeps the tablet rotation unless an
+explicit rotation is requested. The kit itself never changes outputs with `kscreen-doctor`; it
+only reads rotation and scale to place touch context-menu clicks. Desktop posture waits ten
+seconds for the display topology to settle, and external outputs stay under KDE's control.
 
 ### `z13gui-plus`
 
-[`z13gui-plus`](https://github.com/aic0d3r/z13gui-plus) (optional) shows live posture and health
-when the kit is active and exposes desktop touch policy, two-finger context menus, guarded
-folio-touchpad opt-in, and 1–5 touch-scroll controls. Settings are persisted by `z13ctl-plus`
-and apply without restarts.
+[`z13gui-plus`](https://github.com/aic0d3r/z13gui-plus) (optional) adds a **Tablet Kit** card
+(pictured at the top) while the kit is running: live posture, health and folio status, the
+**Disable touchscreen on desktop**, **Two-finger hold context menu** and **Keep scale across
+postures** toggles, the guarded folio-touchpad opt-in, and 1–5 **Scroll sensitivity** and
+**Scroll speed** sliders. `z13ctl-plus` persists the settings, and they apply without restarts.
 
 ## Requirements
 
 - KDE Plasma 6 / Wayland and systemd (`kscreen-doctor`, `qdbus6`, and `gdbus`).
 - `iio-sensor-proxy` (default on CachyOS) — for Plasma auto-rotate.
-- `z13ctl-plus` with its user socket and display coordinator commands available.
-- Membership in `users` (configured by `z13ctl-plus setup`) for the guarded touchpad toggle.
+- `z13ctl-plus` (v2.2.1 or newer) with its user socket enabled.
+- Membership in `users` (configured by `z13ctl-plus setup`) for the folio-touchpad opt-in.
 - `python-evdev` (official repo) — for the uinput switch and touch scroll.
 - `plasma-keyboard` (included with Plasma 6.7, recommended) for the OSK, or
   `maliit-keyboard` (AUR) as a legacy alternative.
-- `/dev/uinput` write access for `z13-tablet-switch` and `z13-touch-scroll` is auto-granted
-  by logind for the active graphical session — no group membership, no root daemon.
-- Touchscreen read access is granted via a udev `uaccess` rule (logind auto-sets ACL).
+- No extra groups or root daemon for input: logind grants `/dev/uinput` to the active
+  graphical session, and a udev `uaccess` rule grants touchscreen read access.
 
 ## Install
 
 > [!IMPORTANT]
 > **`z13ctl-plus` (the display/settings daemon) is a hard dependency.** The AUR package
 > pulls it in; from source, install it first. `z13gui-plus` is optional (a touch overlay for
-> the same toggles).
+> the same settings).
 
 ### AUR (Arch / CachyOS, recommended)
 
-```bash
-paru -S z13-tablet-kit iio-sensor-proxy     # optional: z13gui-plus-bin
-```
-
-Then, as your normal user (stop any other Z13 hardware daemon first):
-
-```bash
-systemctl --user enable --now z13ctl-plus.socket z13ctl-plus.service
-systemctl --user enable --now z13-tablet-switch.service z13-touch-scroll.service
-```
-
-Updates arrive with your normal system update. Reboot (or re-attach the folio) once so the
-folio touchpad rule applies. If you used `install.sh` before, run its `./uninstall.sh`
-first: the copies in `~/.local` would override the package.
+Follow [Quick start](#quick-start). Updates arrive with your normal system update. If you
+used `install.sh` before, run its `./uninstall.sh` first: the copies in `~/.local` would
+override the package.
 
 ### Install from source
 
@@ -222,8 +224,8 @@ For other distros, or to run `master`.
 
 1. **Prerequisites:** `python-evdev` and `iio-sensor-proxy`
    (Arch: `sudo pacman -S python-evdev iio-sensor-proxy`; use your distro's package
-   manager elsewhere). `plasma-keyboard` ships with Plasma 6.7 (recommended OSK); pick
-   `maliit-keyboard` (AUR) only if you want the legacy one.
+   manager elsewhere). For the on-screen keyboard, `plasma-keyboard` ships with Plasma 6.7;
+   install `maliit-keyboard` (AUR) only if you prefer the legacy one.
 2. **`z13ctl-plus`** from its release tarball:
 
    ```bash
@@ -242,15 +244,14 @@ For other distros, or to run `master`.
    ./install.sh
    ```
 
-   `install.sh` is idempotent and safe to re-run. It installs the posture manager, touch
-   scroll, their user services, and the udev rules, then starts everything. To update:
+   `install.sh` is safe to re-run. It installs the posture manager, touch scroll, their user
+   services, and the udev rules, then starts everything. To update:
    `git pull && ./install.sh`.
 
 ### Post-install (one-time)
 
-- **Log out and back in** if prompted — your `users` group membership (set up by
-  `z13ctl-plus setup`) only takes effect at login and is needed for the guarded
-  folio-touchpad toggle.
+- **Log out and back in** if prompted. The `users` group membership added by
+  `z13ctl-plus setup` takes effect at login and is needed for the folio-touchpad opt-in.
 - **Enable auto-rotate once:** Quick Settings → Auto-rotate → right-click →
   "Rotate only in tablet mode". The kit's virtual `SW_TABLET_MODE` gates it.
 
@@ -266,7 +267,7 @@ cat "$XDG_RUNTIME_DIR/z13-tablet-kit/posture"   # one of: desktop / laptop / tab
 
 ## Uninstall
 
-**AUR:** first, as your user, stop the kit and reset the display:
+**AUR:** stop the kit and reset the display before removing the package:
 
 ```bash
 systemctl --user disable --now z13-tablet-switch.service z13-touch-scroll.service
@@ -275,7 +276,8 @@ z13ctl-plus display rotation none
 sudo pacman -R z13-tablet-kit
 ```
 
-Then re-check System Settings → Keyboard → Virtual Keyboard.
+Then re-check System Settings → Keyboard → Virtual Keyboard: the package can't restore the
+mode you had before.
 
 **From source:**
 
@@ -284,28 +286,28 @@ cd z13-tablet-kit
 ./uninstall.sh
 ```
 
-Uninstall returns to laptop defaults (normal rotation, touchscreen on)
-and uninhibits the folio touchpad. The OSK package is left installed. KWin saves the
-on-screen keyboard mode the kit switches, so uninstall restores the mode recorded by the
-first `install.sh` run; installs that predate this record print a note to re-check it in
-System Settings.
+This returns to laptop defaults (normal rotation, touchscreen on), re-enables the folio
+touchpad, and restores the on-screen keyboard mode recorded by the first `install.sh` run.
+Installs older than that record print a reminder to re-check it in System Settings. The OSK
+package stays installed.
 
 ## Tips
 
-- **Touch scrolling:** 2-finger vertical swipe scrolls any focused app (terminal,
-  browser, opencode TUI). `z13gui-plus` exposes sensitivity and speed levels 1–5;
-  defaults 3 and 2 preserve the original behavior.
+- **Touch scrolling:** a two-finger vertical swipe scrolls any focused app (terminal,
+  browser, TUI). In `z13gui-plus`, **Scroll sensitivity** sets how readily a drag starts
+  scrolling and **Scroll speed** how far content moves (1–5, defaults 3 and 2; **Reset
+  Scroll Defaults** restores them).
 - **Touch context menus:** a stationary two-finger hold (~650 ms) moves the pointer to the
-  touch point and sends a real right-click; moving either finger cancels into scrolling.
+  touch point and sends a real right-click; moving either finger cancels it and scrolls.
   Known limit: with touch enabled in desktop posture and a monitor placed left of or above
   the built-in panel, the click lands offset onto that monitor.
 - **Page Up/Down without dedicated keys:** the Z13 folio keyboard has no Page Up/Down
-  keycaps, but **Fn+Up / Fn+Down** are mapped at firmware level and work everywhere.
-- **3-finger gestures** are reserved by KWin (desktop overview / virtual desktop
-  switching). Touch scroll deliberately uses 2 fingers to avoid conflict.
+  keycaps, but **Fn+Up / Fn+Down** are mapped in firmware and work everywhere.
+- **Three-finger gestures** are reserved by KWin (overview, virtual desktop switching), so
+  touch scroll deliberately uses two fingers.
 - **Auto-rotate:** driven by Plasma + `iio-sensor-proxy`, gated by the virtual tablet-mode
-  switch. If a portrait direction comes out mirrored on another unit, that's a sensor-mount
-  quirk to fix in `iio-sensor-proxy`, not this kit.
+  switch. If a portrait orientation comes out mirrored on your unit, that's a sensor-mount
+  quirk to fix in `iio-sensor-proxy`, not in this kit.
 - Configure optional edge gestures in **System Settings → Workspace → Touchscreen Gestures**.
 
 ## License

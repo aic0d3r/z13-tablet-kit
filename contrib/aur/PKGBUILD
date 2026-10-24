@@ -2,7 +2,7 @@
 pkgname=z13-tablet-kit
 pkgver=PKGVER_PLACEHOLDER
 pkgrel=PKGREL_PLACEHOLDER
-pkgdesc='Posture-aware tablet mode for the ASUS ROG Flow Z13 (GZ302) on KDE Plasma 6 / Wayland'
+pkgdesc='Posture-aware tablet mode for the 2025 ASUS ROG Flow Z13 (GZ302) 3-in-1 on KDE Plasma 6 / Wayland'
 arch=('any')
 url='https://github.com/aic0d3r/z13-tablet-kit'
 license=('Apache-2.0')
