@@ -62,6 +62,15 @@ if { [ "$want" = false ] && [[ "$cur" == *true* ]]; } || { [ "$want" = true ] &&
 	fi
 fi
 
+# KWin persists the D-Bus enabled=false to kcminputrc, so the next boot (and an
+# SDDM "Apply Plasma Settings" sync) would start with a dead touchscreen before
+# this kit runs, e.g. at the login screen in tablet posture. Drop the saved key
+# so touch always boots on; the runtime state set above is unaffected.
+KCM=(--file kcminputrc --group Libinput --group 1267 --group 17351 --group "$NAME" --key Enabled)
+if [ "$(kreadconfig6 "${KCM[@]}" 2>/dev/null)" = false ]; then
+	kwriteconfig6 "${KCM[@]}" --delete >/dev/null 2>&1 || true
+fi
+
 # Publish state only after z13ctl-plus and KWin accept it.
 if [ "$publish_ok" = true ]; then
 	tmp="$STATEF.tmp.$$"

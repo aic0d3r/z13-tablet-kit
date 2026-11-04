@@ -191,6 +191,9 @@ def relevant(sock):
             msg = sock.recv(8192)
         except BlockingIOError:
             return hit
+        except OSError:  # ENOBUFS: events were dropped, so re-check posture
+            hit = True
+            continue
         hit = hit or b"\0SUBSYSTEM=usb\0" in msg or b"\0SUBSYSTEM=drm\0" in msg
 
 

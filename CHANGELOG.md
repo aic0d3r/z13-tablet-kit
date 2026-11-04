@@ -3,6 +3,14 @@
 All notable changes. Newest first. Releases are tagged from v1.0.0; older entries are
 grouped by date. The body of each release tag is its GitHub release notes.
 
+## Unreleased
+
+- Fix a dead touchscreen after rebooting in tablet posture. KWin saved the desktop-posture
+  touch-off to `kcminputrc`, so the next boot started with touch disabled before the kit
+  ran, which left the login screen with no input. `dock` now drops that saved key; touch
+  is still turned off at runtime in desktop posture.
+- Fix `z13-tablet-switch` crashing with `ENOBUFS` when a uevent burst overflowed its socket.
+
 ## v1.0.4 (2026-10-17)
 
 - Cut idle wakeups and process spawns in `z13-tablet-switch`: it now waits on usb/drm

@@ -151,6 +151,8 @@ STUBS = {
     "z13ctl-plus": 'echo "$*" >> "$LOG"; exit "${PUBLISH_RC:-0}"',
     "dbus-send": 'echo "dbus-send $*" >> "$LOG"',
     "pgrep": 'exit 1',
+    "kreadconfig6": 'echo "${SAVED:-}"',
+    "kwriteconfig6": 'echo "kwriteconfig6 $*" >> "$LOG"',
 }
 
 
@@ -170,8 +172,9 @@ class Dock(unittest.TestCase):
                     "HOME": str(self.tmp), "XDG_RUNTIME_DIR": str(self.tmp),
                     "LOG": str(self.log)}
 
-    def dock(self, *args, touch="true", publish_rc=0):
-        env = {**self.env, "TOUCH": touch, "PUBLISH_RC": str(publish_rc)}
+    def dock(self, *args, touch="true", publish_rc=0, saved=""):
+        env = {**self.env, "TOUCH": touch, "PUBLISH_RC": str(publish_rc),
+               "SAVED": saved}
         return subprocess.run([str(BIN / "dock"), *args], env=env,
                               capture_output=True, text=True)
 
@@ -203,6 +206,15 @@ class Dock(unittest.TestCase):
     def test_rejects_bad_arguments(self):
         self.assertEqual(self.dock("sideways").returncode, 2)
         self.assertEqual(self.dock("tablet", "maybe").returncode, 2)
+
+    def test_saved_touch_off_is_dropped(self):
+        # KWin persists enabled=false; it must not survive to the next boot.
+        self.assertEqual(self.dock("desktop", saved="false").returncode, 0)
+        self.assertIn("--key Enabled --delete", self.calls())
+
+    def test_saved_touch_absent_is_left_alone(self):
+        self.assertEqual(self.dock("tablet").returncode, 0)
+        self.assertNotIn("kwriteconfig6", self.calls())
 
     def test_unchanged_rerun_is_silent(self):
         self.assertIn("dock: laptop", self.dock("laptop").stdout)

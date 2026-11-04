@@ -6,7 +6,7 @@ pkgdesc='Posture-aware tablet mode for the 2025 ASUS ROG Flow Z13 (GZ302) 3-in-1
 arch=('any')
 url='https://github.com/aic0d3r/z13-tablet-kit'
 license=('Apache-2.0')
-depends=('python' 'python-evdev' 'qt6-tools' 'glib2' 'libkscreen' 'z13ctl-plus-bin')
+depends=('python' 'python-evdev' 'qt6-tools' 'glib2' 'libkscreen' 'kconfig' 'z13ctl-plus-bin')
 optdepends=('plasma-keyboard: on-screen keyboard in tablet posture'
             'maliit-keyboard: alternative on-screen keyboard'
             'iio-sensor-proxy: Plasma auto-rotate'
