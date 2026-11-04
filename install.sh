@@ -56,6 +56,14 @@ sudo install -Dm644 "$KIT/udev/70-elan-touchscreen-uaccess.rules"  "/etc/udev/ru
 sudo rm -f /etc/udev/rules.d/99-elan-touchscreen-uaccess.rules  # pre-v1.0.3 name
 sudo install -Dm644 "$KIT/udev/99-disable-asus-touchpad.rules"     "/etc/udev/rules.d/99-disable-asus-touchpad.rules"
 
+# On-screen keyboard at the login screen. Only with plasma-keyboard: the greeter's
+# KWin would otherwise try to start a missing input method.
+if command -v plasma-keyboard >/dev/null; then
+	sudo install -Dm644 "$KIT/sddm/z13-osk.conf" /etc/sddm.conf.d/10-z13-osk.conf
+else
+	echo "NOTE: plasma-keyboard not installed; skipping the login-screen keyboard"
+fi
+
 # dock overrides KWin's on-screen keyboard mode and KWin persists it in kwinrc.
 # Save the user's own mode once, before the kit first runs, for uninstall.sh.
 OSK_SAVE="${XDG_STATE_HOME:-$HOME/.local/state}/z13-tablet-kit/osk-mode"

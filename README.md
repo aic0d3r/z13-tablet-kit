@@ -169,6 +169,15 @@ alternative); it pops up when a text field gets touch focus. The kit gates it on
 posture change, because the keyboard caches output geometry and would otherwise clip its keys
 after a screen or scale switch.
 
+The kit also enables `plasma-keyboard` on the SDDM login screen, so you can sign in without
+the folio: tap the keyboard button in the bottom-left corner. It adds an SDDM config file
+(`/etc/sddm.conf.d/10-z13-osk.conf` from `install.sh`,
+`/usr/lib/sddm/sddm.conf.d/zzz-z13-osk.conf` from the AUR package) that starts the login
+screen's KWin with `--inputmethod plasma-keyboard`. Because SDDM can't add a flag to the
+existing command, the file repeats the stock CachyOS compositor command. If you already
+customize `CompositorCommand`, add the flag to your own file instead. `install.sh` skips this
+step when `plasma-keyboard` isn't installed.
+
 ### Folio touchpad
 
 Inhibited by default via udev, because its firmware emits jumping-cursor events that libinput
@@ -200,8 +209,9 @@ postures** toggles, the guarded folio-touchpad opt-in, and 1–5 **Scroll sensit
 - `z13ctl-plus` (v2.2.1 or newer) with its user socket enabled.
 - Membership in `users` (configured by `z13ctl-plus setup`) for the folio-touchpad opt-in.
 - `python-evdev` (official repo) — for the uinput switch and touch scroll.
-- `plasma-keyboard` (included with Plasma 6.7, recommended) for the OSK, or
-  `maliit-keyboard` (AUR) as a legacy alternative.
+- `plasma-keyboard` (included with Plasma 6.7, recommended) for the OSK and the login-screen
+  keyboard (the AUR package depends on it), or `maliit-keyboard` (AUR) as a legacy
+  alternative in the session only.
 - No extra groups or root daemon for input: logind grants `/dev/uinput` to the active
   graphical session, and a udev `uaccess` rule grants touchscreen read access.
 
@@ -245,7 +255,7 @@ For other distros, or to run `master`.
    ```
 
    `install.sh` is safe to re-run. It installs the posture manager, touch scroll, their user
-   services, and the udev rules, then starts everything. To update:
+   services, the udev rules, and the login-screen keyboard config, then starts everything. To update:
    `git pull && ./install.sh`.
 
 ### Post-install (one-time)

@@ -37,7 +37,8 @@ else
 fi
 
 sudo rm -f /etc/udev/rules.d/{70-elan-touchscreen-uaccess.rules,99-elan-touchscreen-uaccess.rules,99-disable-asus-touchpad.rules} \
-            /usr/local/bin/z13-tablet-switch /etc/systemd/system/z13-tablet-switch.service
+            /usr/local/bin/z13-tablet-switch /etc/systemd/system/z13-tablet-switch.service \
+            /etc/sddm.conf.d/10-z13-osk.conf
 rm -f ~/.local/bin/{dock,z13-tablet-switch,z13-touch-scroll,z13-rotate} \
       ~/.config/systemd/user/{z13-tablet-switch.service,z13-touch-scroll.service,z13-rotate.service}
 rm -rf "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/z13-tablet-kit"

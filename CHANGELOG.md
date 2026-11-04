@@ -9,6 +9,10 @@ grouped by date. The body of each release tag is its GitHub release notes.
   touch-off to `kcminputrc`, so the next boot started with touch disabled before the kit
   ran, which left the login screen with no input. `dock` now drops that saved key; touch
   is still turned off at runtime in desktop posture.
+- Enable the on-screen keyboard on the SDDM login screen, so you can sign in without the
+  folio. `install.sh` adds `/etc/sddm.conf.d/10-z13-osk.conf` when `plasma-keyboard` is
+  installed, and `uninstall.sh` removes it. The AUR package ships it as
+  `/usr/lib/sddm/sddm.conf.d/zzz-z13-osk.conf` and now depends on `plasma-keyboard`.
 - Fix `z13-tablet-switch` crashing with `ENOBUFS` when a uevent burst overflowed its socket.
 
 ## v1.0.4 (2026-10-17)
