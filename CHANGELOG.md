@@ -3,7 +3,7 @@
 All notable changes. Newest first. Releases are tagged from v1.0.0; older entries are
 grouped by date. The body of each release tag is its GitHub release notes.
 
-## Unreleased
+## v1.0.5 (2026-11-04)
 
 - Fix a dead touchscreen after rebooting in tablet posture. KWin saved the desktop-posture
   touch-off to `kcminputrc`, so the next boot started with touch disabled before the kit
