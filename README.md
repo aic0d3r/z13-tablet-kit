@@ -27,11 +27,17 @@ A posture-aware tablet mode for the **2025 ASUS ROG Flow Z13 (GZ302, AMD Strix H
 **Linux with KDE Plasma 6 / Wayland**. It detects whether the Z13 is **docked**, used as a
 **laptop** with the keyboard folio, or held as a **tablet**, and adapts the touchscreen,
 display scale, auto-rotate and on-screen keyboard to match. No kernel patches; the only
-root-owned pieces are two udev rules.
+root-owned pieces are two udev rules and a login-screen config file.
 
 It should run on any distro with Plasma 6 / Wayland and systemd. The install steps target
 Arch / CachyOS. The screenshot shows the kit's settings in the optional
 [`z13gui-plus`](#z13gui-plus) drawer.
+
+> [!NOTE]
+> **On GNOME?** The companion [`z13ctl-plus`](#the-stack) daemon and `z13gui-plus` drawer
+> run there too (GNOME support in the drawer is an untested beta), but this kit does not:
+> it controls touch, scale and the on-screen keyboard through KWin, so posture handling
+> needs Plasma.
 
 ## Features
 
@@ -82,13 +88,13 @@ The virtual keyboard (plasma-keyboard / maliit) is forced off whenever a physica
 
 ## The stack
 
-This kit is one of three cooperating repos. Install them on the same machine:
+This kit is one of three cooperating repos that run on the same machine:
 
 | Repo | Role |
 |---|---|
 | [z13-tablet-kit](https://github.com/aic0d3r/z13-tablet-kit) | posture detection and touch input — **this repo** |
 | [z13ctl-plus](https://github.com/aic0d3r/z13ctl-plus) | daemon that owns display state and persists tablet settings (**required**) |
-| [z13gui-plus](https://github.com/aic0d3r/z13gui-plus) | optional GTK4 overlay drawer: live posture/health chip and tablet settings |
+| [z13gui-plus](https://github.com/aic0d3r/z13gui-plus) | optional GTK4 overlay drawer: live posture/health chip and tablet settings (also runs on GNOME, in beta) |
 
 How they work together:
 
@@ -204,7 +210,8 @@ postures** toggles, the guarded folio-touchpad opt-in, and 1–5 **Scroll sensit
 
 ## Requirements
 
-- KDE Plasma 6 / Wayland and systemd (`kscreen-doctor`, `qdbus6`, and `gdbus`).
+- KDE Plasma 6 / Wayland and systemd (`kscreen-doctor`, `qdbus6`, and `gdbus`). GNOME and
+  other desktops aren't supported: posture, touch and OSK control go through KWin.
 - `iio-sensor-proxy` (default on CachyOS) — for Plasma auto-rotate.
 - `z13ctl-plus` (v2.2.1 or newer) with its user socket enabled.
 - Membership in `users` (configured by `z13ctl-plus setup`) for the folio-touchpad opt-in.
