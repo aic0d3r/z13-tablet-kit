@@ -327,6 +327,10 @@ package stays installed.
   quirk to fix in `iio-sensor-proxy`, not in this kit.
 - Configure optional edge gestures in **System Settings → Workspace → Touchscreen Gestures**.
 
+## Say thanks
+
+If the tablet kit makes your Z13 nicer to use as a tablet, [star it on GitHub](https://github.com/aic0d3r/z13-tablet-kit). That helps other Z13 owners find it. If you want to chip in, you can [sponsor me on GitHub](https://github.com/sponsors/aic0d3r).
+
 ## License
 
 [Apache-2.0](LICENSE)
