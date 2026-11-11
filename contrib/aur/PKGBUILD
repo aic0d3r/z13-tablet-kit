@@ -24,4 +24,5 @@ package() {
     install -Dm644 sddm/z13-osk.conf "${pkgdir}/usr/lib/sddm/sddm.conf.d/zzz-z13-osk.conf"
     install -Dm644 LICENSE -t "${pkgdir}/usr/share/licenses/${pkgname}/"
     install -Dm644 README.md CHANGELOG.md -t "${pkgdir}/usr/share/doc/${pkgname}/"
+    install -Dm644 docs/ARCHITECTURE.md docs/INSTALL.md docs/TIPS.md -t "${pkgdir}/usr/share/doc/${pkgname}/docs/"
 }
