@@ -104,6 +104,7 @@ def apply_touchpad(enabled, folio_present):
 
 
 _last_report = None
+_last_error = ""  # print a failing apply once, not on every 10 s retry
 
 
 def report_integration(*fields):
@@ -142,6 +143,7 @@ def heartbeat():
 
 
 def apply_posture(state, folio_present, settings):
+    global _last_error
     disable_touch_in_desktop, touchpad_setting = settings
     touchscreen_enabled = not (
         state == "desktop" and disable_touch_in_desktop)
@@ -162,8 +164,9 @@ def apply_posture(state, folio_present, settings):
     _, touchpad_enabled, touchpad_error = apply_touchpad(
         touchpad_setting, folio_present)
     error = error or touchpad_error
-    if error:
+    if error and error != _last_error:
         print(error, flush=True)
+    _last_error = error
     # The report only feeds the GUI health chip and is resent by the heartbeat;
     # its failure must not block the tablet-mode switch.
     report_integration(

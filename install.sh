@@ -78,6 +78,9 @@ fi
 systemctl --user daemon-reload
 sudo udevadm control --reload-rules
 sudo udevadm trigger --subsystem-match=input
+# The inhibit rule matches "add" only; the default trigger sends "change".
+sudo udevadm trigger --action=add --subsystem-match=input \
+	--attr-match=name="ASUSTeK Computer Inc. GZ302EA-Keyboard Touchpad"
 systemctl --user enable z13-tablet-switch.service z13-touch-scroll.service
 systemctl --user restart z13-tablet-switch.service z13-touch-scroll.service
 

@@ -27,6 +27,7 @@ def load(name):
 ts = load("z13-touch-scroll")
 sw = load("z13-tablet-switch")
 E = ts.evdev.ecodes
+real_touch_action_settings = ts.touch_action_settings  # TouchScroll.setUp stubs the module one
 
 
 class FakeUI:
@@ -75,6 +76,49 @@ class TouchScroll(unittest.TestCase):
         self.down(1, 1200, 500)
         self.down(2, 1100, 1600)
         self.assertEqual(self.ui.wheel, [])
+        for slot in (0, 1, 2):  # moving all three must not scroll either
+            self.send((E.EV_ABS, E.ABS_MT_SLOT, slot), (E.EV_ABS, E.ABS_MT_POSITION_Y, 100))
+        self.send((E.EV_SYN, E.SYN_REPORT, 0))
+        self.assertEqual(self.ui.wheel, [])
+
+    def test_dropped_events_forget_fingers(self):
+        self.down(0, 1000, 500)
+        self.send((E.EV_SYN, E.SYN_DROPPED, 0))
+        self.assertEqual(self.state["positions"], {})
+
+    def arm_hold(self):
+        with mock.patch.object(ts, "touch_action_settings", lambda: (90, 2, True)):
+            self.down(0, 1000, 500)
+            self.down(1, 1200, 500)
+        self.state["hold_started"] -= ts.HOLD_SECONDS + 1
+        fired = []
+        with mock.patch.object(ts, "emit_context_menu", lambda *_: fired.append(1)):
+            ts.check_hold(self.state, self.ui)
+            ts.check_hold(self.state, self.ui)  # once per hold
+        return fired
+
+    def test_still_two_finger_hold_right_clicks_once(self):
+        self.assertEqual(self.arm_hold(), [1])
+
+    def test_moving_finger_cancels_hold(self):
+        with mock.patch.object(ts, "touch_action_settings", lambda: (90, 2, True)):
+            self.down(0, 1000, 500)
+            self.down(1, 1200, 500)
+        self.send((E.EV_ABS, E.ABS_MT_SLOT, 0), (E.EV_ABS, E.ABS_MT_POSITION_Y, 500 + 2 * ts.HOLD_MOVE))
+        self.state["hold_started"] -= ts.HOLD_SECONDS + 1
+        with mock.patch.object(ts, "emit_context_menu", lambda *_: self.fail("fired")):
+            ts.check_hold(self.state, self.ui)
+
+    def test_touch_off_in_desktop_posture_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            posture = Path(tmp) / "posture"
+            settings = Path(tmp) / "missing.json"  # defaults: disable touch on desktop
+            with mock.patch.object(ts, "POSTURE_FILE", str(posture)), mock.patch.object(
+                    ts, "SETTINGS_FILE", str(settings)):
+                posture.write_text("desktop\n")
+                self.assertIsNone(real_touch_action_settings())
+                posture.write_text("laptop\n")
+                self.assertIsNotNone(real_touch_action_settings())
 
     def test_to_logical_rotations(self):
         w, h = ts.PANEL_W / 2, ts.PANEL_H / 2  # scale 2
@@ -117,6 +161,16 @@ class TabletSwitch(unittest.TestCase):
                     sw.glob, "glob", lambda _: [str(dev)]):
                 self.assertFalse(sw.apply_posture("laptop", True, (True, True)))
             self.assertEqual((dev / "inhibited").read_text(), "0")
+
+    def test_repeated_failure_is_logged_once(self):
+        run = lambda cmd, **_: types.SimpleNamespace(
+            returncode=int(cmd[0] == sw.DOCK_HELPER), stdout="", stderr="dock: down")
+        sw._last_error = ""
+        with mock.patch.object(sw.subprocess, "run", run), mock.patch.object(
+                sw.glob, "glob", lambda _: []), mock.patch("builtins.print") as out:
+            for _ in range(3):
+                sw.apply_posture("laptop", False, (True, False))
+        self.assertEqual([c.args[0] for c in out.call_args_list].count("dock: down"), 1)
 
     def test_dock_is_next_to_switch(self):
         self.assertEqual(sw.DOCK_HELPER, BIN / "dock")
@@ -216,6 +270,7 @@ class Dock(unittest.TestCase):
         result = self.dock("tablet", publish_rc=1)
         self.assertEqual(result.returncode, 1)
         self.assertFalse(self.posture.exists())
+        self.assertIn("int32:1", self.calls())  # OSK mode set even though publish failed
 
     def test_rejects_bad_arguments(self):
         self.assertEqual(self.dock("sideways").returncode, 2)

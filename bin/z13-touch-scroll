@@ -110,6 +110,14 @@ def handle_event(state, event):
     positions = state["positions"]
     slot = state["current_slot"]
 
+    if (event.type == evdev.ecodes.EV_SYN
+            and event.code == evdev.ecodes.SYN_DROPPED):
+        # Lost events may include a finger-up; drop all fingers, re-learn on next touch.
+        positions.clear()
+        state["origins"].clear()
+        state["hold_armed"] = False
+        return False
+
     if event.type != evdev.ecodes.EV_ABS:
         return (event.type == evdev.ecodes.EV_SYN
                 and event.code == evdev.ecodes.SYN_REPORT)
@@ -176,7 +184,7 @@ def emit_scrolls(state, ui):
     if len(active) != state["fingers"]:
         state["fingers"] = len(active)
         state["ref_y"] = None
-    if not (state["gesture_enabled"] and len(active) >= MIN_FINGERS):
+    if not (state["gesture_enabled"] and len(active) == MIN_FINGERS):
         state["ref_y"] = None
         return
     avg = sum(active.values()) / len(active)
@@ -302,7 +310,9 @@ def main():
 
     state = new_state()
     while True:
-        ready, _, _ = select.select([dev.fd], [], [], 0.05)
+        # Wake on a timer only while a hold is pending; otherwise sleep until touch.
+        pending = state["hold_armed"] and not state["hold_emitted"]
+        ready, _, _ = select.select([dev.fd], [], [], 0.05 if pending else None)
         if ready:
             for event in dev.read():
                 if handle_event(state, event):

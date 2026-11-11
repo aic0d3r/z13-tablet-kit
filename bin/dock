@@ -19,6 +19,20 @@ case "${2-true}" in
 	*) echo "dock: disable-touch-in-desktop must be true or false" >&2; exit 2 ;;
 esac
 
+# Gate the on-screen keyboard on posture. KWin's "TouchOnly" mode pops the OSK
+# on any touch device regardless of physical keyboards, so it appears even with
+# the folio attached. Force it Off in laptop/desktop; restore TouchOnly only in
+# tablet posture. Set first and unconditionally: it needs neither z13ctl-plus
+# nor the touchscreen, so a failure there must not leave the wrong mode.
+case "$state" in
+	tablet) osk_mode=1 ;;  # TouchOnly
+	*)      osk_mode=0 ;;  # Off
+esac
+dbus-send --session --dest=org.kde.KWin --type=method_call /VirtualKeyboard \
+	org.freedesktop.DBus.Properties.Set \
+	string:org.kde.kwin.VirtualKeyboard string:mode \
+	variant:int32:"$osk_mode" >/dev/null 2>&1
+
 mkdir -p "$RUNDIR"
 chmod 700 "$RUNDIR"
 prev=$(cat "$STATEF" 2>/dev/null || true)
@@ -79,7 +93,7 @@ if [ "$publish_ok" = true ]; then
 		echo "dock: $state pending (posture state write failed, touch=$want)" >&2
 		exit 1
 	fi
-	# The 30 s recovery re-run is silent unless it actually changed something.
+	# The periodic recovery re-run is silent unless it actually changed something.
 	if [ "$prev" != "$state" ] || [ "$touch_changed" = true ]; then
 		echo "dock: $state (touch=$want)"
 	fi
@@ -88,26 +102,13 @@ else
 	exit 1
 fi
 
-# Gate the on-screen keyboard on posture. KWin's "TouchOnly" mode pops the OSK
-# on any touch device regardless of physical keyboards, so it appears even with
-# the folio or an external keyboard attached. Force it Off whenever a real
-# keyboard is present; restore TouchOnly only in tablet posture.
-case "$state" in
-	tablet) osk_mode=1 ;;  # TouchOnly
-	*)      osk_mode=0 ;;  # Off
-esac
-dbus-send --session --dest=org.kde.KWin --type=method_call /VirtualKeyboard \
-	org.freedesktop.DBus.Properties.Set \
-	string:org.kde.kwin.VirtualKeyboard string:mode \
-	variant:int32:"$osk_mode" >/dev/null 2>&1
-
 # The on-screen keyboard (plasma-keyboard / maliit-keyboard) caches the output
 # geometry and scale at startup. A posture switch changes the active panel and
 # its scale, so the keyboard keeps rendering against a stale "placeholder
 # screen" and its keys get clipped at the edges. Restarting it lets KWin
 # relaunch it against the new output. The display reconfig is asynchronous, so
 # wait briefly first; run detached so this command never blocks posture apply.
-# Only on a real change: z13-tablet-switch re-runs dock every 30 s for recovery.
+# Only on a real change: z13-tablet-switch re-runs dock periodically for recovery.
 # -x matches the process name only, not any command line mentioning it.
 # SIGKILL, not SIGTERM: KWin respawns the input method only on a crash exit,
 # and plasma-keyboard 6.8 exits cleanly on SIGTERM, leaving no keyboard.

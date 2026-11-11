@@ -45,8 +45,8 @@ Arch / CachyOS. The screenshot shows the kit's settings in the optional
   folio and the connected displays the moment something is plugged in or unplugged.
 - **Auto-rotate that only rotates in tablet mode** — via a virtual `SW_TABLET_MODE` switch the
   GZ302 firmware advertises but never emits.
-- **On-screen keyboard that never covers a real one** — on in tablet mode, forced off whenever
-  the folio or an external keyboard is attached.
+- **On-screen keyboard that never covers the folio** — on in tablet mode, forced off in laptop
+  and desktop posture.
 - **Two-finger scroll in any app** — terminals, TUIs, browsers, document viewers.
 - **Touch right-click** — a two-finger hold opens a context menu, which KDE Wayland has no
   touch gesture for.
@@ -83,8 +83,11 @@ Other distros: see [Install from source](#install-from-source).
 ¹ Unless **Disable touchscreen on desktop** is turned off in `z13gui-plus`.
 
 Priority: desktop > laptop > tablet. Attaching the folio never triggers tablet features.
-The virtual keyboard (plasma-keyboard / maliit) is forced off whenever a physical keyboard
-(folio or external) is present, so it never pops up over a real one.
+The virtual keyboard (plasma-keyboard / maliit) is forced off in laptop and desktop posture, so
+it never pops up over the folio or a dock. Posture is detected from the folio, the dock hub and
+connected displays, not from keyboards: a Bluetooth keyboard on a bare tablet still gets the
+on-screen keyboard, and a tablet on a TV is `desktop` (touch off unless you turn off
+**Disable touchscreen on desktop**).
 
 ## The stack
 
@@ -170,7 +173,7 @@ on CachyOS) reads the accelerometer. No separate rotation daemon is needed; just
 
 `plasma-keyboard` (ships with Plasma 6.7, recommended) or `maliit-keyboard` (AUR, legacy
 alternative); it pops up when a text field gets touch focus. The kit gates it on posture:
-`TouchOnly` in tablet mode, forced `Off` whenever the folio or an external keyboard is attached
+`TouchOnly` in tablet mode, forced `Off` in laptop and desktop posture
 (KWin would otherwise pop the OSK on any touch device). It also restarts the keyboard on every
 posture change, because the keyboard caches output geometry and would otherwise clip its keys
 after a screen or scale switch.
@@ -220,7 +223,8 @@ postures** toggles, the guarded folio-touchpad opt-in, and 1–5 **Scroll sensit
   keyboard (the AUR package depends on it), or `maliit-keyboard` (AUR) as a legacy
   alternative in the session only.
 - No extra groups or root daemon for input: logind grants `/dev/uinput` to the active
-  graphical session, and a udev `uaccess` rule grants touchscreen read access.
+  graphical session, and a udev `uaccess` rule grants touchscreen read access. That rule means
+  any program you run can read raw touch positions, including taps on the on-screen keyboard.
 
 ## Install
 
