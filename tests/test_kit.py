@@ -104,6 +104,20 @@ class TabletSwitch(unittest.TestCase):
         with mock.patch.object(sw.subprocess, "run", run):
             self.assertTrue(sw.apply_posture("tablet", False, (True, False)))
 
+    def test_touchpad_applied_even_when_dock_fails(self):
+        # GNOME: no KWin, so dock exits 1; the sysfs touchpad opt-in must still apply.
+        run = lambda cmd, **_: types.SimpleNamespace(
+            returncode=int(cmd[0] == sw.DOCK_HELPER), stdout="", stderr="dock: touchscreen unavailable")
+        with tempfile.TemporaryDirectory() as tmp:
+            dev = Path(tmp, "event9", "device")
+            dev.mkdir(parents=True)
+            (dev / "name").write_text(sw.TOUCHPAD_NAME + "\n")
+            (dev / "inhibited").write_text("1\n")
+            with mock.patch.object(sw.subprocess, "run", run), mock.patch.object(
+                    sw.glob, "glob", lambda _: [str(dev)]):
+                self.assertFalse(sw.apply_posture("laptop", True, (True, True)))
+            self.assertEqual((dev / "inhibited").read_text(), "0")
+
     def test_dock_is_next_to_switch(self):
         self.assertEqual(sw.DOCK_HELPER, BIN / "dock")
         self.assertEqual(sw.DOCK, (0x0B05, 0x1AC1))  # USB id, not shadowed by the helper path

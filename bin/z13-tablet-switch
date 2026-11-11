@@ -157,10 +157,11 @@ def apply_posture(state, folio_present, settings):
             result.stderr.strip() or "posture application failed")
     except OSError as exc:  # dock missing: retry on the next poll
         error = f"posture application failed: {exc}"
-    if not error:
-        # apply_touchpad returns a non-empty error exactly when it fails.
-        _, touchpad_enabled, error = apply_touchpad(
-            touchpad_setting, folio_present)
+    # sysfs only, no KWin: must run even when dock fails (e.g. GNOME), or the
+    # udev inhibit is never lifted. apply_touchpad returns an error only on failure.
+    _, touchpad_enabled, touchpad_error = apply_touchpad(
+        touchpad_setting, folio_present)
+    error = error or touchpad_error
     if error:
         print(error, flush=True)
     # The report only feeds the GUI health chip and is resent by the heartbeat;
