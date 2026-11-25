@@ -106,10 +106,11 @@ def apply_touchpad(enabled, folio_present):
 
 _last_report = None
 _last_error = ""  # print a failing apply once, not on every 10 s retry
+_last_report_error = ""
 
 
 def report_integration(*fields):
-    global _last_report
+    global _last_report, _last_report_error
     _last_report = fields
     (state, folio_present, healthy, error, touchscreen_enabled,
      touch_scroll_enabled, touchpad_enabled) = fields
@@ -129,12 +130,14 @@ def report_integration(*fields):
             f"--touchpad-enabled={boolean(touchpad_enabled)}",
         ], capture_output=True, text=True)
     except OSError as exc:  # z13ctl-plus missing: report and keep polling
-        print(f"tablet integration report failed: {exc}", flush=True)
-        return False
-    if result.returncode != 0:
-        print(result.stderr.strip() or "tablet integration report failed", flush=True)
-        return False
-    return True
+        error = f"tablet integration report failed: {exc}"
+    else:
+        error = "" if result.returncode == 0 else (
+            result.stderr.strip() or "tablet integration report failed")
+    if error and error != _last_report_error:
+        print(error, flush=True)
+    _last_report_error = error
+    return not error
 
 
 def heartbeat():
@@ -247,14 +250,15 @@ def main():
     uevents = uevent_socket()
     watch = settings_watch()
     switch_state = None
-    applied = None  # (posture, folio, settings) of the last successful apply
+    applied = None  # (posture, folio, settings) of the last apply attempt
     next_apply = next_beat = 0.0
     while not stopping:
         state, folio_present, settings = (*detected_posture(), tablet_settings())
         now = time.monotonic()
         if (state, folio_present, settings) != applied or now >= next_apply:
             ok = apply_posture(state, folio_present, settings)
-            applied = (state, folio_present, settings) if ok else None
+            # A failure retries at next_apply, not on every uevent.
+            applied = (state, folio_present, settings)
             now = time.monotonic()
             next_apply = now + (REAPPLY_INTERVAL if ok else RETRY_INTERVAL)
             next_beat = now + HEARTBEAT  # apply already reported

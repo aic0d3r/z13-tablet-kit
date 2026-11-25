@@ -9,6 +9,24 @@ grouped by date. The body of each release tag is its GitHub release notes.
   gestures off while the folio is attached. Tablet posture always keeps touch on. Needs
   `z13ctl-plus` and `z13gui-plus` releases that carry `disable_touchscreen_in_laptop`.
   [#3](https://github.com/aic0d3r/z13-tablet-kit/issues/3), thanks @M2-TE.
+- Fix two-finger scroll in portrait and upside-down: it now follows the screen rotation.
+- Fix the two-finger-hold right-click landing at twice the distance (pointer acceleration),
+  and stop a swapped finger from re-arming the hold mid-scroll.
+- `z13-tablet-switch`: a failed apply now retries every 10 s instead of on every hotplug
+  event, and a failing report is logged once.
+- `install.sh` builds the login-screen keyboard line from the distro's own SDDM command and
+  refuses to overwrite an unrelated `~/.local/bin/dock`; `uninstall.sh` only removes the kit's.
+
+## v1.0.6 (2026-11-11)
+
+- Fix the folio touchpad opt-in never applying when `dock` fails (e.g. on GNOME, where KWin
+  is missing): the sysfs write now runs regardless.
+- Scroll only with exactly two fingers, forget fingers after dropped input events, and
+  sleep until touch input unless a hold is pending.
+- Set the on-screen keyboard mode before publishing posture, so a later failure cannot
+  leave the wrong mode.
+- Log a repeating apply error once instead of every retry.
+- `install.sh` triggers a udev "add" so the folio touchpad inhibit rule takes effect.
 
 ## v1.0.5 (2026-11-04)
 

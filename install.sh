@@ -44,6 +44,8 @@ if [ -e /usr/local/bin/z13-tablet-switch ] || [ -e /etc/systemd/system/z13-table
 fi
 
 # --- user components (posture manager + tablet switch + touch scroll) ---
+# dock is a generic name: never replace someone else's script.
+if [ -e "$BIN/dock" ] && ! grep -qs z13-tablet-switch "$BIN/dock"; then echo "ERROR: $BIN/dock exists and is not the kit's; move it away first"; exit 1; fi
 install -Dm755 "$KIT/bin/dock"                      "$BIN/dock"
 install -Dm755 "$KIT/bin/z13-tablet-switch"         "$BIN/z13-tablet-switch"
 install -Dm755 "$KIT/bin/z13-touch-scroll"          "$BIN/z13-touch-scroll"
@@ -59,7 +61,15 @@ sudo install -Dm644 "$KIT/udev/99-disable-asus-touchpad.rules"     "/etc/udev/ru
 # On-screen keyboard at the login screen. Only with plasma-keyboard: the greeter's
 # KWin would otherwise try to start a missing input method.
 if command -v plasma-keyboard >/dev/null; then
-	sudo install -Dm644 "$KIT/sddm/z13-osk.conf" /etc/sddm.conf.d/10-z13-osk.conf
+	# Append the flag to the distro's own greeter command so later flag changes still apply;
+	# the shipped literal is only the fallback.
+	stock=$(grep -hs '^CompositorCommand=kwin_wayland' /usr/lib/sddm/sddm.conf.d/*.conf | grep -v -- '--inputmethod' | tail -n1 || true)
+	if [ -n "$stock" ]; then
+		sed "s|^CompositorCommand=.*|$stock --inputmethod plasma-keyboard|" "$KIT/sddm/z13-osk.conf" \
+			| sudo install -Dm644 /dev/stdin /etc/sddm.conf.d/10-z13-osk.conf
+	else
+		sudo install -Dm644 "$KIT/sddm/z13-osk.conf" /etc/sddm.conf.d/10-z13-osk.conf
+	fi
 else
 	echo "NOTE: plasma-keyboard not installed; skipping the login-screen keyboard"
 fi

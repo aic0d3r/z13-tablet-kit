@@ -45,9 +45,12 @@ class FakeUI:
 class TouchScroll(unittest.TestCase):
     def setUp(self):
         self.state, self.ui = ts.new_state(), FakeUI()
-        patcher = mock.patch.object(ts, "touch_action_settings", lambda: (90, 2, False))
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        self.rotation = 1
+        for name, value in (("touch_action_settings", lambda: (90, 2, False)),
+                            ("internal_display", lambda: (self.rotation, 2))):
+            patcher = mock.patch.object(ts, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def send(self, *events):
         for type_, code, value in events:
@@ -60,10 +63,22 @@ class TouchScroll(unittest.TestCase):
                   (E.EV_ABS, E.ABS_MT_POSITION_X, x), (E.EV_ABS, E.ABS_MT_POSITION_Y, y),
                   (E.EV_SYN, E.SYN_REPORT, 0))
 
-    def move_y(self, y):
+    def move_y(self, y, code=E.ABS_MT_POSITION_Y):
         for slot in (0, 1):
-            self.send((E.EV_ABS, E.ABS_MT_SLOT, slot), (E.EV_ABS, E.ABS_MT_POSITION_Y, y))
+            self.send((E.EV_ABS, E.ABS_MT_SLOT, slot), (E.EV_ABS, code, y))
         self.send((E.EV_SYN, E.SYN_REPORT, 0))
+
+    def test_scroll_follows_screen_rotation(self):
+        # (rotation, raw axis moved +200) -> wheel; portrait scrolls on raw X.
+        cases = [(1, E.ABS_MT_POSITION_Y, [-2, -2]), (4, E.ABS_MT_POSITION_Y, [2, 2]),
+                 (2, E.ABS_MT_POSITION_X, [-2, -2]), (8, E.ABS_MT_POSITION_X, [2, 2]),
+                 (2, E.ABS_MT_POSITION_Y, [])]
+        for rotation, code, wheel in cases:
+            self.state, self.ui, self.rotation = ts.new_state(), FakeUI(), rotation
+            self.down(0, 1000, 1000)
+            self.down(1, 1000, 1000)
+            self.move_y(1200, code)
+            self.assertEqual(self.ui.wheel, wheel, (rotation, code))
 
     def test_two_finger_swipe_down_scrolls_up(self):
         self.down(0, 1000, 500)
@@ -99,6 +114,13 @@ class TouchScroll(unittest.TestCase):
 
     def test_still_two_finger_hold_right_clicks_once(self):
         self.assertEqual(self.arm_hold(), [1])
+
+    def test_swapped_finger_does_not_rearm_hold(self):
+        self.arm_hold()
+        self.send((E.EV_ABS, E.ABS_MT_SLOT, 1), (E.EV_ABS, E.ABS_MT_TRACKING_ID, -1),
+                  (E.EV_SYN, E.SYN_REPORT, 0))
+        self.down(1, 1200, 500)
+        self.assertFalse(self.state["hold_armed"])
 
     def test_moving_finger_cancels_hold(self):
         with mock.patch.object(ts, "touch_action_settings", lambda: (90, 2, True)):
@@ -184,6 +206,36 @@ class TabletSwitch(unittest.TestCase):
             for _ in range(3):
                 sw.apply_posture("laptop", False, (True, False, False))
         self.assertEqual([c.args[0] for c in out.call_args_list].count("dock: down"), 1)
+
+    def test_repeated_report_failure_is_logged_once(self):
+        run = lambda cmd, **_: types.SimpleNamespace(returncode=1, stdout="", stderr="no socket")
+        sw._last_report_error = ""
+        with mock.patch.object(sw.subprocess, "run", run), mock.patch("builtins.print") as out:
+            for _ in range(3):
+                sw.report_integration("tablet", False, True, "", True, True, False)
+        self.assertEqual(out.call_count, 1)
+
+    def test_detected_posture(self):
+        real_glob = sw.glob.glob
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(
+                sw.glob, "glob", lambda pattern: real_glob(tmp + pattern)):
+            def put(path, text):
+                Path(tmp + path).parent.mkdir(parents=True, exist_ok=True)
+                Path(tmp + path).write_text(text)
+
+            self.assertEqual(sw.detected_posture(), ("tablet", False))
+            put("/sys/class/drm/card1-eDP-1/status", "connected\n")
+            put("/sys/class/drm/card1-DSI-1/status", "connected\n")
+            put("/sys/class/drm/card1-DP-1/status", "unknown\n")
+            self.assertEqual(sw.detected_posture(), ("tablet", False))
+            put("/sys/bus/usb/devices/1-1/idVendor", "0b05\n")
+            put("/sys/bus/usb/devices/1-1/idProduct", "1a30\n")
+            self.assertEqual(sw.detected_posture(), ("laptop", True))
+            put("/sys/class/drm/card1-DP-1/status", "connected\n")
+            self.assertEqual(sw.detected_posture(), ("desktop", True))
+            put("/sys/class/drm/card1-DP-1/status", "disconnected\n")
+            put("/sys/bus/usb/devices/1-1/idProduct", "1ac1\n")  # dock hub, no folio
+            self.assertEqual(sw.detected_posture(), ("desktop", False))
 
     def test_dock_is_next_to_switch(self):
         self.assertEqual(sw.DOCK_HELPER, BIN / "dock")

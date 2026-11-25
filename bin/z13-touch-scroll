@@ -106,6 +106,8 @@ def new_state():
         "hold_armed": False,
         "hold_emitted": False,
         "hold_started": 0.0,
+        "lifted": False,      # a finger lifted since the gesture began
+        "axis": 1, "sign": 1,  # raw axis/direction that is screen-down
     }
 
 
@@ -137,8 +139,10 @@ def handle_event(state, event):
             positions.pop(slot, None)
             state["origins"].pop(slot, None)
             state["hold_armed"] = False
+            state["lifted"] = True
         else:
             if not positions:
+                state["lifted"] = False
                 settings = touch_action_settings()
                 state["gesture_enabled"] = settings is not None
                 if settings:
@@ -146,9 +150,15 @@ def handle_event(state, event):
                         state["context_menu_enabled"] = settings
             positions[slot] = [None, None]
             if len(positions) == 2:
+                if state["gesture_enabled"]:
+                    # Portrait: screen up/down is raw X; inverted flips the sign.
+                    rotation = (internal_display() or (1,))[0]
+                    state["axis"] = 0 if rotation in (2, 8) else 1
+                    state["sign"] = -1 if rotation in (4, 8) else 1
                 state["hold_armed"] = (
                     state["gesture_enabled"]
-                    and state["context_menu_enabled"])
+                    and state["context_menu_enabled"]
+                    and not state["lifted"])
                 state["hold_emitted"] = False
                 state["hold_started"] = time.monotonic()
             elif len(positions) > 2:
@@ -179,10 +189,11 @@ def handle_event(state, event):
 
 
 def emit_scrolls(state, ui):
+    axis, sign = state["axis"], state["sign"]
     active = {
-        slot: point[1]
+        slot: point[axis] * sign
         for slot, point in state["positions"].items()
-        if point[1] is not None
+        if point[axis] is not None
     }
     # A finger landing or lifting shifts the average; re-anchor instead of scrolling.
     if len(active) != state["fingers"]:
@@ -275,9 +286,12 @@ def emit_context_menu(state, ui):
     ui.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_X, -100000)
     ui.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_Y, -100000)
     ui.syn()
-    time.sleep(0.05)
-    ui.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_X, round(px))
-    ui.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_Y, round(py))
+    time.sleep(0.01)
+    # libinput accelerates this one-event jump by exactly 2.0 at default speed.
+    # shortcut: assumes the z13-touch-actions pointer speed stays at 0; use
+    # <=8 px steps every 20 ms (slow, ~1.8 s) if users change it.
+    ui.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_X, round(px / 2))
+    ui.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_Y, round(py / 2))
     ui.syn()
     time.sleep(0.05)
     ui.write(evdev.ecodes.EV_KEY, evdev.ecodes.BTN_RIGHT, 1)
