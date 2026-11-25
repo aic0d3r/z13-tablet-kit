@@ -83,6 +83,7 @@ def tablet_settings():
     if not isinstance(loaded, dict):
         loaded = {}
     return (loaded.get("disable_touchscreen_in_desktop") is not False,
+            loaded.get("disable_touchscreen_in_laptop") is True,
             loaded.get("touchpad_enabled") is True)
 
 
@@ -144,14 +145,16 @@ def heartbeat():
 
 def apply_posture(state, folio_present, settings):
     global _last_error
-    disable_touch_in_desktop, touchpad_setting = settings
+    disable_touch_in_desktop, disable_touch_in_laptop, touchpad_setting = settings
     touchscreen_enabled = not (
-        state == "desktop" and disable_touch_in_desktop)
+        (state == "desktop" and disable_touch_in_desktop)
+        or (state == "laptop" and disable_touch_in_laptop))
     touchpad_enabled = False
     try:
         result = subprocess.run([
             DOCK_HELPER, state,
             str(disable_touch_in_desktop).lower(),
+            str(disable_touch_in_laptop).lower(),
         ], capture_output=True, text=True)
         if result.stdout:
             print(result.stdout.strip(), flush=True)

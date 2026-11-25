@@ -1,6 +1,6 @@
 #!/bin/bash
 # Apply a desktop / laptop / tablet posture supplied by z13-tablet-switch.
-# Touch is off only in desktop; on in laptop/tablet.
+# Touch is on in tablet; off in desktop/laptop only when that posture's setting asks.
 # Display policy is applied by the z13ctl-plus daemon.
 set -u
 DEST=org.kde.KWin; IF=org.kde.KWin.InputDevice
@@ -12,11 +12,15 @@ if [ ! -x "$Z13CTL_PLUS" ]; then Z13CTL_PLUS=$(command -v z13ctl-plus 2>/dev/nul
 
 case "${1-}" in
 	desktop|laptop|tablet) state=$1 ;;
-	*) echo "usage: dock {desktop|laptop|tablet} [disable-touch-in-desktop]" >&2; exit 2 ;;
+	*) echo "usage: dock {desktop|laptop|tablet} [disable-touch-in-desktop] [disable-touch-in-laptop]" >&2; exit 2 ;;
 esac
 case "${2-true}" in
 	true|false) disable_touch_in_desktop=${2-true} ;;
 	*) echo "dock: disable-touch-in-desktop must be true or false" >&2; exit 2 ;;
+esac
+case "${3-false}" in
+	true|false) disable_touch_in_laptop=${3-false} ;;
+	*) echo "dock: disable-touch-in-laptop must be true or false" >&2; exit 2 ;;
 esac
 
 # Gate the on-screen keyboard on posture. KWin's "TouchOnly" mode pops the OSK
@@ -57,6 +61,7 @@ done
 # Enforce the profile idempotently.
 want=true
 if [ "$state" = desktop ] && [ "$disable_touch_in_desktop" = true ]; then want=false; fi
+if [ "$state" = laptop ] && [ "$disable_touch_in_laptop" = true ]; then want=false; fi
 if [ -z "$path" ]; then
 	echo "dock: touchscreen unavailable" >&2
 	exit 1

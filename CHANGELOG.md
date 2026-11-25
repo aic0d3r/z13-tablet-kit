@@ -3,6 +3,13 @@
 All notable changes. Newest first. Releases are tagged from v1.0.0; older entries are
 grouped by date. The body of each release tag is its GitHub release notes.
 
+## Unreleased
+
+- Add **Disable touchscreen in laptop mode** (off by default): keeps the touchscreen and touch
+  gestures off while the folio is attached. Tablet posture always keeps touch on. Needs
+  `z13ctl-plus` and `z13gui-plus` releases that carry `disable_touchscreen_in_laptop`.
+  [#3](https://github.com/aic0d3r/z13-tablet-kit/issues/3), thanks @M2-TE.
+
 ## v1.0.5 (2026-11-04)
 
 - Fix a dead touchscreen after rebooting in tablet posture. KWin saved the desktop-posture

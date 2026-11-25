@@ -119,6 +119,10 @@ class TouchScroll(unittest.TestCase):
                 self.assertIsNone(real_touch_action_settings())
                 posture.write_text("laptop\n")
                 self.assertIsNotNone(real_touch_action_settings())
+                settings.write_text(json.dumps({"disable_touchscreen_in_laptop": True}))
+                self.assertIsNone(real_touch_action_settings())
+                posture.write_text("tablet\n")  # tablet always keeps touch
+                self.assertIsNotNone(real_touch_action_settings())
 
     def test_to_logical_rotations(self):
         w, h = ts.PANEL_W / 2, ts.PANEL_H / 2  # scale 2
@@ -140,13 +144,22 @@ class TabletSwitch(unittest.TestCase):
                 path.write_text(json.dumps({"scroll_speed": 4, "two_finger_hold_context_menu": True}))
                 self.assertEqual(before, sw.tablet_settings())
 
+    def test_laptop_setting_reaches_dock_and_report(self):
+        calls = []
+        run = lambda cmd, **_: calls.append(cmd) or types.SimpleNamespace(
+            returncode=0, stdout="", stderr="")
+        with mock.patch.object(sw.subprocess, "run", run):
+            self.assertTrue(sw.apply_posture("laptop", False, (True, True, False)))
+        self.assertEqual(calls[0][1:], ["laptop", "true", "true"])
+        self.assertIn("--touchscreen-enabled=false", calls[1])
+
     def test_report_failure_does_not_block_posture(self):
         def run(cmd, **_):
             failed = cmd[1:3] == ["tablet", "report"]  # dock succeeds, report fails
             return types.SimpleNamespace(returncode=int(failed), stdout="", stderr="no socket")
 
         with mock.patch.object(sw.subprocess, "run", run):
-            self.assertTrue(sw.apply_posture("tablet", False, (True, False)))
+            self.assertTrue(sw.apply_posture("tablet", False, (True, False, False)))
 
     def test_touchpad_applied_even_when_dock_fails(self):
         # GNOME: no KWin, so dock exits 1; the sysfs touchpad opt-in must still apply.
@@ -159,7 +172,7 @@ class TabletSwitch(unittest.TestCase):
             (dev / "inhibited").write_text("1\n")
             with mock.patch.object(sw.subprocess, "run", run), mock.patch.object(
                     sw.glob, "glob", lambda _: [str(dev)]):
-                self.assertFalse(sw.apply_posture("laptop", True, (True, True)))
+                self.assertFalse(sw.apply_posture("laptop", True, (True, False, True)))
             self.assertEqual((dev / "inhibited").read_text(), "0")
 
     def test_repeated_failure_is_logged_once(self):
@@ -169,7 +182,7 @@ class TabletSwitch(unittest.TestCase):
         with mock.patch.object(sw.subprocess, "run", run), mock.patch.object(
                 sw.glob, "glob", lambda _: []), mock.patch("builtins.print") as out:
             for _ in range(3):
-                sw.apply_posture("laptop", False, (True, False))
+                sw.apply_posture("laptop", False, (True, False, False))
         self.assertEqual([c.args[0] for c in out.call_args_list].count("dock: down"), 1)
 
     def test_dock_is_next_to_switch(self):
@@ -208,7 +221,7 @@ class TabletSwitch(unittest.TestCase):
             raise FileNotFoundError(cmd[0])
 
         with mock.patch.object(sw.subprocess, "run", run):
-            self.assertFalse(sw.apply_posture("tablet", False, (True, False)))
+            self.assertFalse(sw.apply_posture("tablet", False, (True, False, False)))
 
 
 STUBS = {
@@ -261,6 +274,14 @@ class Dock(unittest.TestCase):
         self.assertEqual(self.dock("desktop", "false", touch="true").returncode, 0)
         self.assertNotIn("InputDevice enabled <", self.calls())  # no touch write
 
+    def test_laptop_disables_touch_only_when_asked(self):
+        self.assertEqual(self.dock("laptop", "true", touch="true").returncode, 0)
+        self.assertNotIn("InputDevice enabled <", self.calls())  # default keeps touch
+        self.assertEqual(self.dock("laptop", "true", "true", touch="true").returncode, 0)
+        self.assertIn("enabled <false>", self.calls())
+        self.assertEqual(self.dock("tablet", "true", "true", touch="false").returncode, 0)
+        self.assertIn("enabled <true>", self.calls())  # tablet ignores the laptop setting
+
     def test_tablet_enables_touch_and_osk(self):
         self.assertEqual(self.dock("tablet", touch="false").returncode, 0)
         self.assertIn("enabled <true>", self.calls())
@@ -275,6 +296,7 @@ class Dock(unittest.TestCase):
     def test_rejects_bad_arguments(self):
         self.assertEqual(self.dock("sideways").returncode, 2)
         self.assertEqual(self.dock("tablet", "maybe").returncode, 2)
+        self.assertEqual(self.dock("laptop", "true", "maybe").returncode, 2)
 
     def test_saved_touch_off_is_dropped(self):
         # KWin persists enabled=false; it must not survive to the next boot.

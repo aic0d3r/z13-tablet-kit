@@ -70,6 +70,7 @@ def touch_action_settings():
     speed = 2
     context_menu = False
     disable_touch_in_desktop = True
+    disable_touch_in_laptop = False
     try:
         with open(SETTINGS_FILE) as stream:
             settings = json.load(stream)
@@ -78,9 +79,12 @@ def touch_action_settings():
         context_menu = settings.get("two_finger_hold_context_menu") is True
         disable_touch_in_desktop = (
             settings.get("disable_touchscreen_in_desktop") is not False)
+        disable_touch_in_laptop = (
+            settings.get("disable_touchscreen_in_laptop") is True)
     except (AttributeError, OSError, ValueError):
         pass
-    if posture == "desktop" and disable_touch_in_desktop:
+    if ((posture == "desktop" and disable_touch_in_desktop)
+            or (posture == "laptop" and disable_touch_in_laptop)):
         return None
     if not isinstance(sensitivity, int) or not 1 <= sensitivity <= 5:
         sensitivity = 3

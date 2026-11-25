@@ -19,9 +19,9 @@ How they work together:
 2. `dock` publishes posture to the `z13ctl-plus` daemon, which serializes scale
    and rotation changes via `kscreen-doctor`, restoring the scale last used in each posture.
 3. `z13gui-plus` shows the live posture/health chip and exposes the tablet
-   settings: **Disable touchscreen on desktop**, **Two-finger hold context menu**,
-   **Keep scale across postures**, the folio touchpad opt-in, and scroll sensitivity
-   and speed.
+   settings: **Disable touchscreen on desktop**, **Disable touchscreen in laptop mode**,
+   **Two-finger hold context menu**, **Keep scale across postures**, the folio touchpad
+   opt-in, and scroll sensitivity and speed.
 4. `z13ctl-plus` persists those settings and projects them to
    `$XDG_RUNTIME_DIR/z13ctl-plus/tablet-settings.json`; `z13-tablet-switch` and
    `z13-touch-scroll` read the projection and apply changes live, without
@@ -72,7 +72,8 @@ Applies the posture supplied by `z13-tablet-switch`: it toggles the internal tou
 
 Reads the ELAN9008 touchscreen, detects two-finger vertical swipes, and injects mouse-wheel
 events via evdev UInput. Works in **any** app: terminal scrollback, TUIs, browsers, and document
-viewers. It stays idle in desktop posture while **Disable touchscreen on desktop** is on. With
+viewers. It stays idle while the touchscreen is off (desktop posture with **Disable touchscreen on
+desktop**, laptop posture with **Disable touchscreen in laptop mode**). With
 **Two-finger hold context menu** enabled, a stationary two-finger hold moves the pointer to the
 touch point and right-clicks, since KDE Wayland has no touch right-click.
 
@@ -120,6 +121,6 @@ seconds for the display topology to settle, and external outputs stay under KDE'
 
 [`z13gui-plus`](https://github.com/aic0d3r/z13gui-plus) (optional) adds a **Tablet Kit** card
 (pictured in the README) while the kit is running: live posture, health and folio status, the
-**Disable touchscreen on desktop**, **Two-finger hold context menu** and **Keep scale across
-postures** toggles, the guarded folio-touchpad opt-in, and 1–5 **Scroll sensitivity** and
-**Scroll speed** sliders. `z13ctl-plus` persists the settings, and they apply without restarts.
+**Disable touchscreen on desktop**, **Disable touchscreen in laptop mode**, **Two-finger hold
+context menu** and **Keep scale across postures** toggles, the guarded folio-touchpad opt-in,
+and 1–5 **Scroll sensitivity** and **Scroll speed** sliders. `z13ctl-plus` persists the settings, and they apply without restarts.

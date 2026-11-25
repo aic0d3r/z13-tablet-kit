@@ -62,10 +62,12 @@ Other distros: see [Install from source](docs/INSTALL.md).
 | Posture | Detected by | Touch | Tablet mode | Auto-rotate | Virtual keyboard |
 |---|---|---|---|---|---|
 | **desktop** | dock hub `0b05:1ac1` or any external monitor | off¹ | off | off | off |
-| **laptop** | folio `0b05:1a30`, no dock | on | off | off | off |
+| **laptop** | folio `0b05:1a30`, no dock | on² | off | off | off |
 | **tablet** | neither | on | **on** | **on** | **on** |
 
 ¹ Unless **Disable touchscreen on desktop** is turned off in `z13gui-plus`.
+
+² Off when **Disable touchscreen in laptop mode** is turned on. Tablet posture always keeps touch on.
 
 Priority: desktop > laptop > tablet. Posture comes from the folio, dock hub and connected
 displays, not from keyboards: a Bluetooth keyboard on a bare tablet still gets the on-screen
