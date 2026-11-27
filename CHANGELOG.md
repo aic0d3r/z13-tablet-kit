@@ -3,15 +3,14 @@
 All notable changes. Newest first. Releases are tagged from v1.0.0; older entries are
 grouped by date. The body of each release tag is its GitHub release notes.
 
-## Unreleased
+## v1.0.7 (2026-11-27)
 
 - Add **Disable touchscreen in laptop mode** (off by default): keeps the touchscreen and touch
   gestures off while the folio is attached. Tablet posture always keeps touch on. Needs
-  `z13ctl-plus` and `z13gui-plus` releases that carry `disable_touchscreen_in_laptop`.
+  `z13ctl-plus` 2.7.0+ and `z13gui-plus` 2.9.0+.
   [#3](https://github.com/aic0d3r/z13-tablet-kit/issues/3), thanks @M2-TE.
 - Add **Meta+Shift+T** (KDE global shortcut, `z13-touch-toggle`): flips the touchscreen
-  for the current posture and shows the result as a Plasma OSD. Needs `z13ctl-plus` with
-  `tablet touch toggle`.
+  for the current posture and shows the result as a Plasma OSD. Needs `z13ctl-plus` 2.7.0+.
 - Fix two-finger scroll in portrait and upside-down: it now follows the screen rotation.
 - Fix the two-finger-hold right-click landing at twice the distance (pointer acceleration),
   and stop a swapped finger from re-arming the hold mid-scroll.
