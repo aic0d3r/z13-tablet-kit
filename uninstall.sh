@@ -41,7 +41,8 @@ sudo rm -f /etc/udev/rules.d/{70-elan-touchscreen-uaccess.rules,99-elan-touchscr
             /etc/sddm.conf.d/10-z13-osk.conf
 # dock is a generic name: only remove the kit's own.
 if grep -qs z13-tablet-switch ~/.local/bin/dock; then rm -f ~/.local/bin/dock; fi
-rm -f ~/.local/bin/{z13-tablet-switch,z13-touch-scroll,z13-rotate} \
+rm -f ~/.local/bin/{z13-tablet-switch,z13-touch-scroll,z13-touch-toggle,z13-rotate} \
+      ~/.local/share/{applications,kglobalaccel}/z13-touch-toggle.desktop \
       ~/.config/systemd/user/{z13-tablet-switch.service,z13-touch-scroll.service,z13-rotate.service}
 rm -rf "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/z13-tablet-kit"
 

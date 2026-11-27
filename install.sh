@@ -49,6 +49,12 @@ if [ -e "$BIN/dock" ] && ! grep -qs z13-tablet-switch "$BIN/dock"; then echo "ER
 install -Dm755 "$KIT/bin/dock"                      "$BIN/dock"
 install -Dm755 "$KIT/bin/z13-tablet-switch"         "$BIN/z13-tablet-switch"
 install -Dm755 "$KIT/bin/z13-touch-scroll"          "$BIN/z13-touch-scroll"
+install -Dm755 "$KIT/bin/z13-touch-toggle"          "$BIN/z13-touch-toggle"
+# Meta+Shift+T touch toggle; kglobalaccel picks the default shortcut up from the symlink.
+APPS="$HOME/.local/share/applications"
+sed "s#@BIN@#$BIN#" "$KIT/contrib/z13-touch-toggle.desktop" | install -Dm644 /dev/stdin "$APPS/z13-touch-toggle.desktop"
+install -d "$HOME/.local/share/kglobalaccel"
+ln -sf "$APPS/z13-touch-toggle.desktop" "$HOME/.local/share/kglobalaccel/z13-touch-toggle.desktop"
 install -Dm644 "$KIT/systemd/z13-tablet-switch.service" "$UNITS/z13-tablet-switch.service"
 install -Dm644 "$KIT/systemd/z13-touch-scroll.service" "$UNITS/z13-touch-scroll.service"
 

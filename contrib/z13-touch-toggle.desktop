@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Toggle Z13 Touchscreen
+Comment=Turn the touchscreen on or off in laptop or desktop posture
+Exec=@BIN@/z13-touch-toggle
+Icon=input-touchscreen
+Terminal=false
+StartupNotify=false
+X-KDE-Shortcuts=Meta+Shift+T
+Categories=Utility;System;
+Keywords=touch;touchscreen;z13;tablet;

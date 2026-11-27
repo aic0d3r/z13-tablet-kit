@@ -37,6 +37,8 @@ scale, rotation and the on-screen keyboard. No kernel patches.
   gesture for it).
 - **Per-posture scale** — defaults `1.75` tablet, `1.5` docked and laptop.
 - **Folio touchpad fix** — inhibited by default, with a guarded opt-in.
+- **Touchscreen on/off shortcut** — **Meta+Shift+T** turns touch off or back on in laptop
+  and desktop posture, with an on-screen confirmation.
 - **Live settings** — toggles in the optional [`z13gui-plus`](https://github.com/aic0d3r/z13gui-plus)
   drawer apply without restarts.
 

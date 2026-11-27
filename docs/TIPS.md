@@ -10,6 +10,12 @@ Back to the [README](../README.md).
   touch point and sends a real right-click; moving either finger cancels it and scrolls.
   Known limit: with touch enabled in desktop posture and a monitor placed left of or above
   the built-in panel, the click lands offset onto that monitor.
+- **Touchscreen off for a moment** (wiping the screen, resting a hand): press
+  **Meta+Shift+T** in laptop or desktop posture; press it again to turn touch back on. It
+  flips the saved **Disable touchscreen …** setting for that posture, so it survives a
+  reboot. Tablet posture always keeps touch on, and detaching the folio is the fallback.
+  Rebind it under **System Settings → Keyboard → Shortcuts → Toggle Z13 Touchscreen**, or
+  run `z13-touch-toggle` yourself.
 - **Page Up/Down without dedicated keys:** the Z13 folio keyboard has no Page Up/Down
   keycaps, but **Fn+Up / Fn+Down** are mapped in firmware and work everywhere.
 - **Three-finger gestures** are reserved by KWin (overview, virtual desktop switching), so

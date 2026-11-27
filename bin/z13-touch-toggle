@@ -1,0 +1,15 @@
+#!/bin/bash
+# Flip the touchscreen for the current posture (KDE shortcut Meta+Shift+T) and
+# show the result as a Plasma OSD, since a disabled touchscreen looks no different.
+set -u
+Z13CTL_PLUS="$HOME/.local/bin/z13ctl-plus"
+if [ ! -x "$Z13CTL_PLUS" ]; then Z13CTL_PLUS=z13ctl-plus; fi
+
+msg=$("$Z13CTL_PLUS" tablet touch toggle 2>&1)
+rc=$?
+msg=${msg#Error: }
+[ -n "$msg" ] || msg="Touchscreen toggle failed"
+gdbus call --session --dest org.kde.plasmashell --object-path /org/kde/osdService \
+	--method org.kde.osdService.showText input-touchscreen "$msg" >/dev/null 2>&1 \
+	|| echo "$msg"
+exit "$rc"

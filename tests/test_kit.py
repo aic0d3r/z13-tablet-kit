@@ -364,5 +364,34 @@ class Dock(unittest.TestCase):
         self.assertEqual(self.dock("laptop").stdout, "")
 
 
+class TouchToggle(unittest.TestCase):
+    def run_toggle(self, ctl_body, gdbus_rc):
+        with tempfile.TemporaryDirectory() as tmp:
+            stubs, home_bin = Path(tmp, "stubs"), Path(tmp, ".local/bin")
+            for directory, name, body in ((home_bin, "z13ctl-plus", ctl_body),
+                                          (stubs, "gdbus", f'echo "$*" > "$LOG"; exit {gdbus_rc}')):
+                directory.mkdir(parents=True, exist_ok=True)
+                (directory / name).write_text(f"#!/bin/sh\n{body}\n")
+                (directory / name).chmod(0o755)
+            log = Path(tmp, "log")
+            env = {**os.environ, "HOME": tmp, "LOG": str(log),
+                   "PATH": f"{stubs}:{os.environ['PATH']}"}
+            result = subprocess.run([str(BIN / "z13-touch-toggle")], env=env,
+                                    capture_output=True, text=True)
+            return result, log.read_text() if log.exists() else ""
+
+    def test_success_shows_osd(self):
+        result, osd = self.run_toggle('echo "Touchscreen off"', 0)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("showText input-touchscreen Touchscreen off", osd)
+        self.assertEqual(result.stdout, "")
+
+    def test_error_is_shown_without_prefix_and_fails(self):
+        result, _ = self.run_toggle(
+            'echo "Error: touchscreen always stays on in tablet mode" >&2; exit 1', 1)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "touchscreen always stays on in tablet mode\n")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -39,6 +39,7 @@ How they work together:
 | [`z13-tablet-switch`](#z13-tablet-switch) | user service | detects posture, owns the virtual tablet-mode switch |
 | [`dock`](#dock) | called by the switch | applies posture: touchscreen, OSK mode, publish to `z13ctl-plus` |
 | [`z13-touch-scroll`](#z13-touch-scroll) | user service | two-finger scroll and right-click |
+| [`z13-touch-toggle`](#z13-touch-toggle) | KDE shortcut | Meta+Shift+T touch on/off |
 | [Auto-rotate](#auto-rotate) | Plasma | rotation, gated on tablet mode |
 | [On-screen keyboard](#on-screen-keyboard) | Plasma | OSK, gated on posture |
 | [Folio touchpad](#folio-touchpad) | udev rule | inhibited by default |
@@ -76,6 +77,13 @@ viewers. It stays idle while the touchscreen is off (desktop posture with **Disa
 desktop**, laptop posture with **Disable touchscreen in laptop mode**). With
 **Two-finger hold context menu** enabled, a stationary two-finger hold moves the pointer to the
 touch point and right-clicks, since KDE Wayland has no touch right-click.
+
+### `z13-touch-toggle`
+
+Bound to **Meta+Shift+T** through a KDE global-shortcut `.desktop` entry. It runs
+`z13ctl-plus tablet touch toggle`, which flips the saved **Disable touchscreen …** setting for
+the current posture (desktop or laptop; tablet always keeps touch on), and shows the result as
+a Plasma OSD. `z13-tablet-switch` sees the settings change and applies it like a GUI toggle.
 
 ### Auto-rotate
 
